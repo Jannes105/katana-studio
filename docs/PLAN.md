@@ -66,7 +66,7 @@ Jede Schicht kennt nur die darunterliegende:
 │ Protokoll      Roland-SysEx: RQ1/DT1, Prüfsumme,       │──┘
 │                Adressrechnung, Kodierung, Begrüßung    │
 ├────────────────────────────────────────────────────────┤
-│ Transport      Android-USB │ Web MIDI │ Mock │ (WebUSB)│
+│ Transport      Android-USB │ Web MIDI │ Mock           │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -86,12 +86,20 @@ Gemeinsame Schnittstelle `Transport` (`send`, `onMessage`, Verbindungsstatus). U
   sind damit testbar. Ein empfangener Block kann mehrere Pakete enthalten.
 - **Web MIDI**: für die Entwicklung am PC (über den Boss-Treiber, Port „KATANA3“).
 - **Mock-Amp**: für Entwicklung und Tests ohne Amp.
-- **WebUSB**: nur für den Machbarkeitstest in Phase 0a.
+- ~~WebUSB~~: entfällt. Im Handy-Chrome scheitert `claimInterface` am vom Kernel belegten Interface (gemessen in 0a,
+  siehe 4.2a). Die Testseite `testpages/usb/` bleibt nur als Deskriptor-Anzeige.
+
+**Gemessene USB-Werte** (Phase 0a, Nothing Phone (3a) Pro, Einzelheiten in `protocol-notes.md` Abschnitt 3):
+**Interface 3** (Klasse `FF/03/00`, Roland-Deskriptor `06 24 F1 02 …`), **Altsetting 0**, **Bulk OUT `0x03`** und
+**Bulk IN `0x84`** (je 512 Bytes), **Kabelnummer 0**, normale 4-Byte-USB-MIDI-Pakete (CIN 4–7 für SysEx). Ein
+Lesevorgang liefert oft mehrere Pakete; unbenutzte Bytes im letzten Paket sind **nicht** genullt (die CIN gibt die Länge).
 
 **Pflichten des Plugins** (Android-Fallstricke, alle umzusetzen):
-- Nur das **MIDI-Interface** übernehmen, Audio-Interfaces nicht anfassen. `claimInterface(…, force = true)`, falls der
-  Kernel es schon belegt hat. Das richtige **Altsetting** per `setInterface` wählen (Roland legt MIDI teils auf Altsetting 1).
-- Endpunkte können **Bulk oder Interrupt** sein; beides unterstützen.
+- Nur das **MIDI-Interface** (3) übernehmen, Audio-Interfaces (1, 2) nicht anfassen. `claimInterface(…, force = true)`
+  ist **nötig**, der Kernel belegt das Interface. Altsetting 0 per `setInterface` wählen. Die Auswahlregel der
+  Test-APK (Herstellerklasse, Bulk- oder Interrupt-Endpunkt IN und OUT, kein isochroner Endpunkt) traf richtig und
+  wird übernommen; die Werte oben dienen als Prüfung, nicht als feste Zahlen.
+- Endpunkte können **Bulk oder Interrupt** sein; beides unterstützen (Altsetting 1 bietet Interrupt, ungenutzt).
 - Empfangen in einem eigenen Lese-Thread (`UsbRequest.queue` oder `bulkTransfer` mit Timeout).
 - Berechtigung: Geräte-Filter `VID 0x0582 / PID 0x02F0` für `USB_DEVICE_ATTACHED` im Manifest, dann fragt Android nur
   einmal („Immer mit dieser App öffnen“). Für `requestPermission` einen expliziten, veränderbaren PendingIntent
@@ -100,16 +108,29 @@ Gemeinsame Schnittstelle `Transport` (`send`, `onMessage`, Verbindungsstatus). U
 - `launchMode="singleTask"`, Einstecken bei laufender App über `onNewIntent`.
 
 **Sende-Warteschlange** (`src/midi/queue.ts`):
-- Abstand wie BTS: **20 ms plus Nachrichtenlänge ÷ 3,125 ms** (bildet die alte MIDI-Geschwindigkeit nach). Das zählt bei großen Nachrichten.
+- **Kein fester Abstand für kleine Nachrichten** (gemessen, `protocol-notes.md` 2.13): Der Amp nahm 20 DT1 ohne Pause
+  an und beantwortete 30 RQ1 hintereinander vollständig. Die 20 ms von BTS entfallen. Für **große DT1** (ganze Blöcke,
+  Zurückspielen in 1c) bleibt vorerst der BTS-Abstand (20 ms plus Länge ÷ 3,125 ms), bis das gemessen ist. Am Handy
+  wird der Test einmal mit der Test-APK wiederholt.
+- Der Amp quittiert einen geschriebenen Wert **nicht** und meldet ihn auch nicht zurück (kein Echo). Geprüft wird
+  nur durch Zurücklesen. Eine Antwort zeigt den Stand zum Zeitpunkt der Antwort, nicht der Anfrage.
 - Wird ein Regler gezogen, ersetzt der neueste Wert den noch nicht gesendeten Wert derselben Adresse.
 - Lässt sich **gezielt leeren** (bei Patchwechsel, siehe 4.5).
 - **Immer nur ein RQ1 offen.** Die Antwort besteht bei Bereichsanfragen aus vielen DT1 (ein DT1 pro Block, siehe 4.2b).
-  Antworten werden **nach Adresse zugeordnet, nicht nach Reihenfolge**: Der Amp liefert die Blöcke nicht streng
-  aufsteigend und schiebt eigene Meldungen dazwischen. Ein Ende-Zeichen gibt es nicht; fertig ist die Anfrage, wenn
-  alle erwarteten Blockadressen da sind. Timeout, dann eine Wiederholung, dann Verbindungsfehler.
+  Antworten werden **nach Adresse zugeordnet, nicht nach Reihenfolge**: In allen späteren Läufen kamen die Blöcke
+  aufsteigend, aber mit Editor-Modus an schiebt der Amp seine Meldungen (Regler, Kanalwechsel) jederzeit dazwischen.
+  Ein Ende-Zeichen gibt es nicht; fertig ist die Anfrage, wenn alle erwarteten Blockadressen da sind. Das ist jetzt
+  umsetzbar: Die **Blocktabelle** (80 Blöcke je Patch, 21 für SYSTEM) steht in `protocol-notes.md` 2.12 und kommt als
+  feste Tabelle in den Code. Timeout, dann eine Wiederholung, dann Verbindungsfehler.
+- Eine Meldung des Amps, deren Adresse im Bereich der offenen Anfrage liegt, ist von einer Antwort nicht zu
+  unterscheiden. Das ist unschädlich, solange der neueste Wert gewinnt (der Amp meldet ja den aktuellen Stand).
 - **Schreiben geht vor Lesen:** Ein Reglerwert (DT1) wartet nie hinter einer laufenden Hintergrund-Leseanfrage.
 
 ### 4.2a Befund USB (15.11.2026)
+
+**Ergebnis von Phase 0a:** Die Vermutungen unten haben sich bestätigt. WebUSB scheitert am belegten Interface, die
+Test-APK mit `force` klappt, das Paketformat ist das übliche USB-MIDI-Format. Die Werte stehen in 4.2. Der Rest
+dieses Abschnitts ist die Begründung von damals.
 
 - Der Katana meldet sich als **herstellerspezifisches Gerät** (`VID_0582 PID_02F0`, Klasse `FF/FF`), unter Windows
   bedient vom Roland-Treiber `RDID1254`. Er ist **kein** Standard-USB-MIDI-Gerät.
@@ -118,9 +139,9 @@ Gemeinsame Schnittstelle `Transport` (`send`, `onMessage`, Verbindungsstatus). U
 - Folge: Android sieht den Amp nicht als MIDI-Gerät. Die App spricht die USB-Schnittstelle selbst an.
 - Das **USB-MIDI-Paketformat** ist bei Roland-Geräten dieser Art üblich. Belegt ist das durch den Linux-Treiber
   (`snd-usb-audio`, Roland-Sonderbehandlung inkl. Altsetting-Umschaltung) und Erfahrungen mit dem BOSS GT-1. **Für den Gen 3
-  ist es ungeprüft**, ebenso welches Altsetting und welcher Endpunkt-Typ.
-- **WebUSB im Handy-Chrome** kann nur ein „Ja“ liefern: Belegt der Android-Kernel das Interface schon, scheitert Chrome, während
-  eine App es sich mit `force` holen kann. Ein Fehlschlag dort ist also kein Ausschlusskriterium.
+  in 0a bestätigt** (Interface 3, Altsetting 0, Bulk).
+- **WebUSB im Handy-Chrome** ist gescheitert, wie erwartet: `claimInterface(3)` meldet „Unable to claim interface“,
+  der Kernel hält es. Die Test-APK holt es sich mit `force`.
 - **Am Quelltext geprüft (15.11.2026):**
   - *Android zeigt den Amp nicht als MIDI-Gerät.* Das Android-Framework legt ein MIDI-Gerät nur an, wenn ein Interface
     die Klasse Audio mit Unterklasse MIDI-Streaming hat (`UsbDescriptorParser.hasMIDIInterface()`). Bei Klasse `FF`
@@ -128,13 +149,12 @@ Gemeinsame Schnittstelle `Transport` (`send`, `onMessage`, Verbindungsstatus). U
     aus; der Fünf-Minuten-Versuch mit `katana-test.html` am Handy bleibt trotzdem der erste Schritt in 0a, weil er nichts kostet.
   - *Der Linux-Kernel erkennt Roland-Geräte dieser Art automatisch* (Sammeleintrag für `VID 0582` mit Klasse `FF` in
     `sound/usb/quirks-table.h`, MIDI-Erkennung über den Roland-Deskriptor `06 24 F1 02 …`). Hat der Handy-Kernel diesen
-    Treiber, belegt er das Interface. **Der WebUSB-Versuch scheitert dann voraussichtlich, die Test-APK mit `force` ist
-    der wahrscheinliche Weg.** Ob der Treiber im Kernel des Nothing Phone steckt, ist offen.
+    Treiber, belegt er das Interface. Beim Nothing Phone ist das so (WebUSB scheitert genau daran).
 
 ### 4.2b Messungen am Amp (15.11.2026, am PC über den Boss-Treiber, nur gelesen)
 
-Gemessen mit einem kleinen Testwerkzeug direkt am MIDI-Port „KATANA3“. Die Zeiten gelten für den PC; am Handy werden
-sie in 0a nachgemessen.
+Gemessen mit einem kleinen Testwerkzeug direkt am MIDI-Port „KATANA3“. Die Zeiten gelten für den PC; am Handy dauerte
+der ganze Patch in 0a 0,284 s, also praktisch gleich.
 
 | Frage | Ergebnis |
 |---|---|
@@ -145,9 +165,9 @@ sie in 0a nachgemessen.
 | Alle zehn Speicherplätze mit **einem** RQ1 (`20 10 00 00`, Größe `01 20 00 00`) | **800 DT1, 26 490 Datenbytes, 2,7 s.** |
 | SYSTEM mit einem RQ1 (`10 00 00 00`) | 21 DT1, 131 Datenbytes, 23 ms. |
 | Längste Nachricht | 238 Bytes. |
-| Reihenfolge der DT1 | **nicht streng aufsteigend** (z. B. Contour-Blöcke und zwei SYSTEM-Blöcke vertauscht). |
-| Meldet der Amp von sich aus? | **Ja, auch ohne Editor-Modus:** mitten in einer Anfrage kamen unaufgefordert Name, NS-Block und Gain/Volume des aktuellen Patches. Auslöser unbekannt. |
-| Zuordnung Index → `PATCH(n+1)` | Patchnummer war `8`, der Name an `21 10 00 00` stimmt mit dem aktuellen Patch überein, und alle 80 Blöcke waren inhaltsgleich. Für Index 8 **bestätigt**; die Namen der übrigen Plätze sind plausibel (`20 10` = „KATANA“ = Panel). |
+| Reihenfolge der DT1 | Im ersten Lauf einmal vertauscht (Contour-Blöcke, zwei SYSTEM-Blöcke), in **allen späteren Läufen aufsteigend** (PC und Handy). Zugeordnet wird trotzdem nach Adresse. |
+| Meldet der Amp von sich aus? | **Nur mit Editor-Modus an.** Die „unaufgeforderten Meldungen“ des ersten Laufs (Name, NS-Block, Gain/Volume) waren Meldungen des Editor-Modus, der von einer früheren Sitzung noch an war. Mit Editor-Modus aus meldet der Amp gar nichts (siehe 4.3). |
+| Zuordnung Index → `PATCH(n+1)` | Für **Panel und A1–B4 bestätigt** (je 80 von 80 Blöcken gleich). |
 | Index 9 (`21 20 00 00`) | heißt **„PREVIEW“**: der Vorschau-Platz (passt zu `PREVIEW_MUTE`). `21 30 00 00` antwortet nicht. |
 
 BTS selbst liest blockweise (ein RQ1 pro Block, höchstens 128 Bytes, 15 s Timeout). Das ist die Herkunft der „80 Anfragen“;
@@ -162,22 +182,39 @@ nötig ist es nicht.
 - **Kodierungen** der Werte: `u7` (1 Byte), `u2x4` und `u4x4` (Nibbles, z. B. Patchnummer, Delay-Zeit, Assign-Min/Max),
   `u2x7` (Befehle), `ascii(16)` (Patch-Name, Zeichen 32–125, mit Leerzeichen aufgefüllt).
 - **Begrüßung** wie BTS bei Gen 3: Identity Request (Device-ID aus der Antwort übernehmen) → **Modellcode** prüfen
-  (Byte 10 der Antwort: `06` = KATANA-100) → RQ1 Editor-Level, erwartet `1` → DT1 Editor-Modus an.
+  (Byte 10 der Antwort: `06` = KATANA-100) → RQ1 Editor-Level, erwartet `1` → DT1 Editor-Modus an (`7F 00 00 01` = `01`).
+- **Editor-Modus an ist Pflicht**, nicht nur BTS-Nachbau (gemessen, `protocol-notes.md` Q8): Ohne ihn meldet der Amp
+  **nichts**, weder Kanalwechsel noch Regler noch Speichern. Lesen und `PATCH_SELECT` gehen auch ohne. Das Umschalten
+  wird **nicht quittiert**, der Zustand ist aber **zurücklesbar** (RQ1 `7F 00 00 01`, Größe 1). Die App schaltet ihn
+  beim Verbinden ein und prüft ihn durch Zurücklesen, auch nach jedem Wiederverbinden.
+- Der **Befehlsbereich** `7F 00 00 0x` antwortet nur auf **Einzelabfragen** (Größe 1); eine Bereichsanfrage darüber
+  bleibt unbeantwortet.
   Weicht Modellcode oder Editor-Level ab, **sperrt die App nicht**, sondern warnt deutlich und läuft **nur lesend**
   weiter; Schreiben lässt sich dann bewusst freischalten. Eine harte Sperre würde nach einem Firmware-Update die Probe kosten. Revision und Running Mode nutzt BTS bei Gen 3 nicht, wir auch nicht.
 - Eingehende Roland-Nachrichten werden mit der gelernten Device-ID **und** mit `7F` akzeptiert (wie BTS).
 - **Abmelden** (Editor-Modus aus) versucht die App beim bewussten Trennen und beim Wechsel in den Hintergrund nach längerer
   Zeit. Auf Android gibt es aber kein verlässliches „App wird beendet“, und nach dem Abziehen lässt sich nichts mehr senden.
-  **„Editor-Modus bleibt an“ ist also der Normalfall.** Was das am Amp bewirkt, wird in „Phase 0 am PC“ mit dem Prototyp
-  geprüft (Tab ohne Abmelden schließen, Amp bedienen, neu verbinden) und als Entscheidung in `protocol-notes.md` festgehalten.
+  **„Editor-Modus bleibt an“ ist also der Normalfall.** Gemessen: Das ist unschädlich, der Amp lief so lange normal.
+  Abmelden bleibt deshalb ein Versuch ohne Gewähr.
 - **Befehle:** Patch wählen (`PATCH_SELECT`), speichern (`PATCH_WRITE`, der Amp quittiert per DT1 an derselben Adresse),
   löschen. BTS sendet nach dem Speichern und nach dem Zurückspielen zusätzlich `PREVIEW_MUTE` und `EXPORT`. Deren Wirkung
   klären wir durch eigene Versuche, denn BTS selbst lässt sich nicht mitschneiden (Port exklusiv, USBPcap erfolglos).
-- **Patchwechsel am Amp:** Der Amp meldet ihn per DT1 an `00 00 00 00` (Patchnummer, `u2x4`). Speichert man am Amp,
-  meldet er `PATCH_WRITE`. (Aus der BTS-Logik abgeleitet, per Mitschnitt bestätigen.)
+- **Meldungen des Amps** (mit Editor-Modus an, gemessen, `protocol-notes.md` Q1–Q3):
+  - *Kanalwechsel am Amp:* fünf Status-Bytes `7F 01 01 01`–`05`, dann `01`–`04` noch einmal, dann DT1 `00 00 00 00`
+    mit der neuen Patchnummer (`00 0n`), alles in rund 100 ms. Der Patch-Inhalt kommt **nicht** mit, die App liest ihn.
+    Beim Panel kommt zusätzlich `30 00 02 00` (Stellung der fünf Effekt-Regler).
+  - *`PATCH_SELECT` aus der App:* zuerst ein Echo an `7F 00 01 00`, dann Patchnummer, Status-Bytes und die Patchnummer
+    noch einmal (12 Nachrichten in rund 150 ms).
+  - *Speichern am Amp:* DT1 `7F 00 01 04` mit dem Index als zwei Nibbles (`00 08` für B4), danach die Status-Bytes;
+    keine Patchnummer.
+  - *Regler am Amp:* ein DT1 pro Wert, etwa alle 50 ms während des Drehens, an der Adresse des Parameters.
+  - Die Status-Bytes `7F 01 01 01`–`05` sind die Farbe von Booster, Mod, FX, Delay und Reverb (0–2), `3` = aus
+    (gemessen). Sie kommen auch, wenn am Amp ein Effekt-Taster die Farbe wechselt.
+  - Nach dem **Aus- und Einschalten** des Amps ist der Editor-Modus wieder aus (gemessen).
+  - **Signal für „Patch gewechselt“ ist der DT1 an `00 00 00 00`**, egal woher der Wechsel kam.
 - **Speicherplätze:** Die Patchnummer läuft 0–9: Index 0 = **Panel** (nicht speicherbar), 1–4 = **A1–A4**, 5–8 = **B1–B4**,
   9 = **Vorschau-Platz „PREVIEW“** (nie beschreiben). Der Speicher eines Index n liegt im Block `PATCH(n+1)`: Panel = `20 10 00 00`, A1 = `20 20 00 00`
-  usw. (für Index 8 am Amp bestätigt, siehe 4.2b; die übrigen in 0b durch Kanalwechsel gegenprüfen). Diese Zuordnung steht an **einer**
+  usw. (für Panel und A1–B4 am Amp bestätigt, siehe 4.2b). Diese Zuordnung steht an **einer**
   Stelle im Code und hat einen eigenen Test, weil ein Versatz um eins Backups auf den falschen Platz schreiben würde.
 - **Schreiben auf Speicherplätze wird geprüft:** danach zurücklesen und vergleichen, bei Abweichung klare Meldung.
 
@@ -192,7 +229,8 @@ organisiert:
   Anzeige (Tabellen wie Notenwerte oder Frequenzen).
 - **Variationen („Farben“):** Viele Blöcke gibt es im Patch **mehrfach**. Das Schema beschreibt einen Block **einmal als
   Vorlage** mit seinen **Instanzen** (Basisadressen) und einer Regel „aktive Instanz = Funktion eines anderen Parameters“:
-  - Der Farb-Block hat **fünf** Einträge (je 0–2): Booster, Mod, FX, Delay, Reverb.
+  - Der Farb-Block (`04 00`, gemessen) hat **fünf** Einträge (je 0–2): Booster, Mod, FX, Delay, Reverb. Die
+    An/Aus-Schalter liegen im Block `08 00` (6 Bytes: Booster, Mod, FX, Delay, vermutlich Delay 2, Reverb).
   - Mod und FX bestehen je Instanz aus **zwei** Blöcken: einer mit dem Typ, einer mit den Parametern aller Typen.
   - **Delay 2** hat keine eigene Farbe. Es hängt an der Reverb-Farbe und am `LAYER_MODE` der jeweiligen Reverb-Variation
     (0 = Delay 2, 1 = beides, 2 = Reverb).
@@ -214,13 +252,20 @@ Feste Regeln, damit die App in der Probe nicht hakt:
 
 1. **Der Amp ist die Wahrheit.** Eigene Änderungen werden sofort angezeigt, dann gilt, was der Amp meldet.
 2. **Regler ziehen:** Während des Ziehens und **300 ms danach** ignoriert die App eingehende Werte *für diese Adresse*.
-   Danach gewinnt der Wert vom Amp. Eine weitere Echo-Erkennung gibt es nicht (BTS hat auch keine).
-3. **Patchwechsel** (aus der App oder am Amp gemeldet): Warteschlange leeren, Bedienung kurz sperren, kurz warten
-   (BTS: 500 ms), dann neu lesen. Kommt währenddessen ein weiterer Wechsel, wird das Lesen abgebrochen und neu begonnen.
+   Danach gewinnt der Wert vom Amp. Gemessen: Der Amp schickt **kein Echo** auf geschriebene Werte. Die Regel bleibt
+   trotzdem, weil sie billig ist und zwei echte Fälle abfängt: die Antwort einer Hintergrund-Leseanfrage, die vor dem
+   Schreiben beantwortet wurde, und gleichzeitiges Drehen am Amp. Eine Echo-Erkennung braucht es nicht.
+3. **Patchwechsel** (aus der App oder am Amp gemeldet, Signal ist der DT1 an `00 00 00 00`): Warteschlange leeren,
+   Bedienung kurz sperren, warten, bis die Meldungen des Amps **100 ms Ruhe** haben (höchstens 300 ms nach dem Signal),
+   dann neu lesen. Gemessen: Der ganze Meldungsschwall ist nach rund 150 ms vorbei, und ein Lesen danach stimmte jedes
+   Mal mit dem Speicherplatz überein; die 500 ms von BTS sind nicht nötig. Kommt währenddessen ein weiterer Wechsel,
+   wird das Lesen abgebrochen und neu begonnen.
 4. **Lesen in einem Zug:** Ein ganzer Patch kommt mit **einer** Bereichsanfrage in rund 0,3 s (am PC gemessen, 4.2b).
    Das zweistufige Lesen entfällt. Nur falls die Messung am Handy in 0a deutlich schlechter ausfällt, kommt es zurück.
-5. **Neu lesen**, wenn die App wieder in den Vordergrund kommt, und per Knopf „Neu lesen“. Grund: Regler am Amp ändern
-   eventuell Werte, ohne sie zu melden (in Phase 0 per Mitschnitt prüfen).
+5. **Neu lesen**, wenn die App wieder in den Vordergrund kommt, und per Knopf „Neu lesen“. Das ist nur noch ein
+   **Sicherheitsnetz**: Mit Editor-Modus an meldet der Amp jeden Regler, und im Vergleich vorher/nachher hatte sich
+   kein Byte unbemerkt geändert. Es fängt aber verpasste Meldungen ab (App im Hintergrund, Kabel kurz weg) und
+   kostet nur 0,3 s.
 6. **„Ungespeichert“** = Vergleich des aktuellen Patches mit dem **gespeicherten Platz** des Kanals (`PATCH(n+1)`, nach
    Patchwechsel und nach jedem Speichern im Hintergrund gelesen). Nicht mit dem zuletzt gelesenen aktuellen Patch, denn der
    kann nach Neu-Lesen oder Wiederverbinden schon verändert sein. Das zusätzliche Lesen kostet nur rund 0,3 s (4.2b).
@@ -246,7 +291,9 @@ Feste Regeln, damit die App in der Probe nicht hakt:
     (das ist ebenfalls Rohbytes pro Block).
 - **Komplett-Backup** = SYSTEM + Speicherplätze A1–B4 + Panel + aktueller (ggf. ungespeicherter) Patch. Mit
   Bereichsanfragen sind das **drei Anfragen und rund 3 s** (am PC gemessen, 4.2b), nicht 800 Anfragen. Ein Kabelzug bricht sauber ab (keine halbe Datei).
-  Der Vorschau-Platz (Index 9) gehört nicht ins Backup.
+  Der Vorschau-Platz (Index 9) gehört nicht ins Backup. Die Bereichsanfrage über alle Speicherplätze
+  (`20 10 00 00`, Größe `01 20 00 00`) liefert ihn aber mit (Blöcke ab `21 20 00 00`); er wird beim Empfang
+  herausgefiltert. Alternativ endet die Anfrage vor ihm (Größe `01 10 00 00`, neun Plätze).
   Readonly-Blöcke werden mitgesichert, aber nie zurückgeschrieben.
 - Für Backups reicht eine **Blocktabelle** (Adresse, Größe). Die vollständige Parameterliste ist dafür nicht nötig.
 - Dateien werden über das Android-Teilen-Menü exportiert (z. B. nach Google Drive) und importiert.
@@ -293,7 +340,7 @@ katana-studio/
 Ab Phase 1 endet jede Phase mit einer Version, die in der Probe benutzbar ist, und mit einer abgehakten Checkliste am
 echten Amp (`docs/testplan/`).
 
-### Phase 0 am PC – Protokollfragen *(sofort, braucht kein Handy, läuft neben 0a)*
+### Phase 0 am PC – Protokollfragen *(erledigt bis auf die Reste in 9.2 B)*
 Mit dem Prototyp oder einem kleinen Testwerkzeug am Port „KATANA3“ mitschneiden und in `docs/protocol-notes.md` festhalten:
 Patchwechsel-Meldung, Speichern am Amp, Regler am Amp, Auslöser der unaufgeforderten Meldungen, `EXPORT`/`PREVIEW_MUTE`,
 Zuordnung Index → `PATCH(n+1)` für alle Kanäle, Ort der Firmware-Version, Verhalten bei eingeschaltetem Editor-Modus.
@@ -302,7 +349,7 @@ Die Antworten bestimmen die Regeln in 4.5; deshalb stehen sie vor dem Bau der St
 **Vor der ersten Schreibfunktion überhaupt:** ein Komplett-Backup mit **BTS am PC**. Das ist das Sicherheitsnetz mit
 erprobtem Rückweg, solange unser eigenes Zurückspielen noch nicht existiert.
 
-### Phase 0a – USB-Nachweis am Handy *(entscheidet über alles)*
+### Phase 0a – USB-Nachweis am Handy *(erledigt: Fertig-Kriterium erfüllt über die Test-APK, Reste in 9.2 C)*
 Vorher: erster Commit, öffentliches Repo, GitHub Pages für `testpages/`.
 
 0. **Fünf-Minuten-Versuch:** Amp ans Handy, `katana-test.html` (Web MIDI) im Handy-Chrome öffnen. Erscheint wider
@@ -426,16 +473,108 @@ App-Daten. Deshalb wird er gesichert, bevor die erste signierte APK aufs Handy k
 | Google verlangt ab 2027 auch beim Sideloading einen verifizierten Entwickler | Vor 2027 prüfen, ob sich der Schlüssel mit dem kostenlosen Hobby-Konto registrieren lässt. Installation per ADB bleibt als Ausweg. |
 | Datenverlust in der App | Datei-Export von Anfang an, Rohbyte-Format mit Versionsnummer. |
 | Fehlerhaftes Update kurz vor der Probe | Releases nur per Versions-Tag, Installation nur von Hand. |
-| Firmware-Update ändert das Protokoll | Modellcode und Editor-Level prüfen (bei Abweichung nur lesend, siehe 4.3). In „Phase 0 am PC“ klären, wo der Amp seine Firmware-Version meldet, und dann beim Verbinden mit der Version der Parameterliste vergleichen. |
+| Firmware-Update ändert das Protokoll | Modellcode und Editor-Level prüfen (bei Abweichung nur lesend, siehe 4.3). Die Firmware-Version ließ sich bisher nicht auslesen; findet sie sich, wird sie beim Verbinden mit der Version der Parameterliste verglichen. |
 | Markenbeschwerde wegen öffentlichem Repo | Kein „BOSS“ im Titel, Hinweis „inoffiziell“, keine Logos, kein Auspack-Werkzeug im Repo. Bei Beschwerde umbenennen. |
 
-## 8. Offen, wird in Phase 0 geklärt
+## 8. Offen
 
-- USB: Interface, Altsetting, Endpunkte, Paketformat (0a).
-- Akku, OTG, Kabel am Nothing Phone (3a) Pro (0a).
-- Am PC mit dem Prototyp (Phase 0 am PC): Verhalten, wenn der Editor-Modus an bleibt.
-- Per eigenem Mitschnitt (Phase 0 am PC): Meldungen bei Patchwechsel, Speichern und Reglern am Amp; Wirkung von `EXPORT` und
-  `PREVIEW_MUTE`; Zuordnung Index → `PATCH(n+1)` für die übrigen Kanäle; wo die Firmware-Version steht; Tuner-Daten;
-  was die unaufgeforderten Meldungen des Amps auslöst (4.2b).
-- Am Handy nachmessen (0a): Dauer einer Bereichsanfrage über den ganzen Patch.
-- **Schon geklärt (4.2b):** Bereichsanfragen, Lesezeiten, Lesen ohne Editor-Modus, Index 9 = Vorschau-Platz.
+- Am Handy (Rest von 0a, siehe 9.2 C): Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne über den Amp.
+- Am Amp: große DT1 ohne Abstand (vor 1c).
+- Am Handy: die Sendetests aus `protocol-notes.md` 2.13 einmal mit der Test-APK wiederholen.
+- Später: `PATCH_WRITE` vom PC aus (vor 1c), Wirkung von `EXPORT` und `PREVIEW_MUTE` (Phase 4), Ort der
+  Firmware-Version (bisher nicht gefunden, kein Hindernis).
+- **Entfallen:** Tuner-Daten (dir ist kein Tuner am Amp bekannt; nur falls sich doch einer findet, wird es nachgeholt).
+- **Geklärt** (4.2, 4.2b, 4.3): USB-Werte, Bereichsanfragen und Lesezeiten an PC und Handy, Lesen ohne Editor-Modus,
+  Editor-Modus ist Pflicht und darf an bleiben, Meldungen bei Kanalwechsel, Reglern und Speichern, Zuordnung A1–B4,
+  Index 9 = Vorschau-Platz, Herkunft der „unaufgeforderten Meldungen“.
+
+## 9. Stand und Vorbereitung für Phase 0b
+
+Stand 15.11.2026 abends. Einzelheiten und Mitschnitt-Namen stehen in `docs/protocol-notes.md`.
+
+### 9.1 Erledigt
+
+- **Phase 0a:** Fertig-Kriterium erfüllt. Die Test-APK (`usbtest/`) liest und schreibt am Amp, die Änderung am
+  NS-Threshold war hörbar. WebUSB im Chrome scheitert am belegten Interface, das Kotlin-Plugin ist also nötig.
+  USB-Werte: Interface 3, Altsetting 0, Bulk OUT `0x03` / IN `0x84`, Kabelnummer 0, normales USB-MIDI-Paketformat.
+  Ganzer Patch am Handy in 0,284 s.
+- **Phase 0 am PC:** Der Amp meldet Kanalwechsel, Regler und Speichern von sich aus, aber **nur mit Editor-Modus an**.
+  Zuordnung Index → `PATCH(n+1)` für A1–B4 bestätigt. `PATCH_SELECT` funktioniert. Blocktabelle eines Patches
+  (80 Blöcke) liegt vor.
+- Werkzeuge: Testseiten, Mitschnitt-Werkzeug, `tools/katana-probe.ps1`, CI für Test-APK und Pages.
+
+### 9.2 Vor dem Start von 0b nötig
+
+**A. Dokumente nachziehen** (reine Schreibarbeit, kein Amp nötig) – *erledigt 15.11.2026*
+
+1. Diesen Plan an die Messungen anpassen. Überholt sind:
+   - 4.2 / 4.2a: USB-Werte eintragen, WebUSB als Weg streichen. „Fertig, wenn alle Blockadressen da sind“ ist jetzt
+     umsetzbar, weil die Blocktabelle existiert.
+   - 4.2b: Die Reihenfolge der Blöcke war in allen neuen Läufen aufsteigend. Die „unaufgeforderten Meldungen“ sind
+     die Meldungen des Editor-Modus.
+   - 4.3: Editor-Modus einschalten ist **Pflicht** (nicht nur BTS-Nachbau), der Zustand ist zurücklesbar, das
+     Umschalten wird nicht quittiert. Meldungen bei Kanalwechsel (`00 00 00 00` und Status-Bytes `7F 01 01 01`–`05`)
+     und beim Speichern (`7F 00 01 04`) eintragen. Der Befehlsbereich `7F 00 00 0x` antwortet nur auf Einzelabfragen.
+   - 4.5: Regel 5 (Neu-Lesen) ist nur noch Sicherheitsnetz. Regel 3: Wartezeit nach Patchwechsel neu festlegen.
+   - 4.6: Die Bereichsanfrage über alle Speicherplätze liefert den Vorschau-Platz mit; er muss herausgefiltert werden.
+   - Abschnitt 8: Liste der offenen Punkte kürzen.
+2. `docs/testplan/phase-0.md` abhaken, den Tuner-Punkt als entfallen markieren.
+3. Im Mitschnitt-Werkzeug vermerken, dass „Dump candidate areas“ im Befehlsbereich nichts zeigt.
+
+**B. Restliche Protokollfragen, die die State-Schicht betreffen** (am Amp, zusammen etwa eine halbe Stunde)
+
+4. ~~**Echo beim Schreiben**~~ *erledigt 15.11.2026:* kein Echo, weder mit noch ohne Editor-Modus. Regel 2 in 4.5
+   bleibt aus anderen Gründen.
+5. ~~**Sendeabstand über USB**~~ *erledigt 15.11.2026 (am PC):* Für kleine Nachrichten ist kein Abstand nötig.
+   Offen: große DT1 (vor 1c) und eine Wiederholung am Handy mit der Test-APK.
+6. ~~**Die fünf Effekt-Regler einzeln**~~ *erledigt 15.11.2026:* Index 0–4 = Booster, Mod, FX, Delay, Reverb.
+   Status-Bytes = Farbe der Variation (0–2), 3 = aus. Der Reverb-Schalter liegt an `08 05`, nicht `08 04`.
+7. ~~**Effekt-Taster am Amp**~~ *erledigt:* Kurzer Druck wechselt die Farbe (Farb-Block `04 00`), nur bei
+   eingeschaltetem Effekt. Ein- und Ausschalten geht über den Regler (auf null = aus). Halten meldet nichts.
+8. ~~**Speichern mit echter Änderung**~~ *erledigt:* Speicherplatz danach identisch mit dem aktuellen Patch.
+9. ~~**Editor-Modus nach Aus- und Einschalten**~~ *erledigt:* Er ist danach **aus**. Die App schaltet ihn bei
+   jedem Verbinden ein (4.3).
+10. ~~**Panel**~~ *erledigt:* Index 0 liegt in `20 10 00 00` (80 von 80 Blöcken gleich).
+
+Nicht nötig für 0b, kommt später: `PATCH_WRITE` vom PC aus (vor 1c), `EXPORT` / `PREVIEW_MUTE` (Phase 4),
+Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
+
+**C. Am Handy** (Rest von 0a, geht nebenbei in einer Probe)
+
+11. 15 Minuten angesteckt: bleibt die Verbindung, braucht es eine OTG-Einstellung?
+12. Akkuverbrauch über eine feste Zeit.
+13. Brummen durch das Kabel bei Probenlautstärke.
+14. Kommen Benachrichtigungstöne des Handys aus dem Amp? (Der Amp meldet sich auch als Audio-Gerät.)
+15. Eine Probe mit der Test-APK und ihren drei Reglern. Danach die Reihenfolge in 1b noch einmal ansehen.
+
+**D. Entwicklungsumgebung und Repo**
+
+16. **Signierschlüssel** erzeugen, doppelt sichern (Passwort-Manager und USB-Stick), als Geheimnis in GitHub
+    hinterlegen. Muss fertig sein, bevor die erste signierte APK aufs Handy kommt.
+17. **Lokaler Build:** JDK 21 und Android-Kommandozeilen-Werkzeuge auf dem PC, `adb` über WLAN mit dem Handy
+    koppeln. Bisher baut nur CI (gut zwei Minuten je Versuch); für die Arbeit am USB-Plugin ist das zu langsam.
+18. **Arbeitsweise im Repo festlegen:** direkt auf `main` oder über Branch und Pull Request. Schutz für `main`,
+    damit nur grüne Stände hineinkommen.
+19. **CI aufräumen:** Die Workflows nutzen Actions-Versionen, die GitHub als veraltet meldet (Node 20).
+20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
+    (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
+    -Werte öffentlich im Repo stehen dürfen, oder ob sie ersetzt werden.
+
+**E. Entscheidungen**
+
+21. **Verhältnis von Test-App und echter App:** Vorschlag: `usbtest/` bleibt als eigene Test-App bestehen (für die
+    Probe und für spätere USB-Fehlersuche). Die echte App entsteht im Wurzelverzeichnis und übernimmt das
+    Kotlin-Plugin als Kopie.
+22. **Versionen festschreiben:** Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21 (so baut die
+    Test-APK heute).
+23. **Schema der Parameterliste** (4.4) als Entwurf, zumindest für die Blöcke von Phase 1b (Amp, Booster, Delay,
+    Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle.
+
+### 9.3 Bereit für die Implementierung, wenn
+
+- A (Dokumente) erledigt ist und der Plan dem gemessenen Stand entspricht,
+- aus B mindestens die Punkte 4 und 5 beantwortet sind (sie bestimmen Warteschlange und State-Regeln),
+- der Signierschlüssel gesichert ist (16) und der lokale Build läuft (17),
+- die Entscheidungen 18, 21 und 22 getroffen sind.
+
+Alles andere (Rest von B, C, 19, 20, 23) kann parallel zu 0b laufen.

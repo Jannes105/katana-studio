@@ -20,7 +20,7 @@ export const EXPERIMENTS = Object.freeze([
     writes: false,
     steps: [
       'Note the firmware version from a source you trust (as shown by BOSS Tone Studio or the amp itself), if you know it.',
-      'Press "Dump candidate areas" in the firmware section.',
+      'Press "Dump candidate areas" in the firmware section. The command area 7F 00 00 00 stays empty there (no reply to range reads); read its bytes one at a time with "Custom RQ1", size 1.',
       'Look for the version digits in the dumps. Write down address and bytes, or "not found".',
     ],
   },
@@ -100,7 +100,7 @@ export const EXPERIMENTS = Object.freeze([
       'Press "Editor mode ON". Operate the amp: knobs, channel buttons, saving. Does anything behave differently (display, sound, controls blocked)?',
       'Re-run the "later" steps of Q1, Q2, Q3, Q4 and Q9 now.',
       'Download the capture, then close the tab without pressing "Editor mode OFF". Operate the amp again.',
-      'Reload the page, connect, press "Dump candidate areas" (reads 7F 00 00 00 ff.). Is editor mode still on? Does reading behave as before?',
+      'Reload the page, connect, read the editor mode byte with "Custom RQ1" 7F 00 00 01, size 1 ("Dump candidate areas" shows nothing for the command area). Is editor mode still on? Does reading behave as before?',
       'Switch the amp off and on, reconnect, dump again. Finally press "Editor mode OFF".',
     ],
   },

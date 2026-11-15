@@ -1,5 +1,6 @@
 # Read-only probe for the Katana Gen 3 on the Windows MIDI port "KATANA3".
-# Sends only the identity request and RQ1 (read) requests, except with -SelectTest (see below).
+# Sends only the identity request and RQ1 (read) requests, except with -SelectTest, -EditorMode and
+# -WriteTest (see the parameters below).
 # Usage:  powershell -File tools/katana-probe.ps1 [-IdleSeconds 60] [-OutDir captures]
 # BOSS Tone Studio and any browser tab using the port must be closed.
 param(
@@ -15,7 +16,10 @@ param(
   [string]$Label = 'amp operated by hand',
   [int]$MaxLines = 80,
   # Writes: sets editor mode (DT1 7F 00 00 01) to 0 or 1 first. -1 = leave it alone.
-  [int]$EditorMode = -1
+  [int]$EditorMode = -1,
+  # Writes: echo and send-pacing test on the NS threshold of the current patch only (never PATCH_WRITE).
+  # The original value is restored at the end. Needs the BOSS Tone Studio backup.
+  [switch]$WriteTest
 )
 $ErrorActionPreference = 'Stop'
 
@@ -310,6 +314,100 @@ try {
       }
     }
     "$n byte(s) changed"
+    return
+  }
+
+  if ($WriteTest) {
+    "`n== Write test on NS threshold 20 00 58 01 (current patch only, value restored at the end)"
+    $nsAddr = [byte[]](0x20, 0, 0x58, 1)
+    function ReadNs { $x = Ask (Rq1 $nsAddr (0, 0, 0, 1)) 'RQ1 NS threshold' 400 60; if ($x.Dt1.Count) { [int]$x.Dt1[0].Data[0] } else { -1 } }
+    $em = (Ask (Rq1 (0x7F, 0, 0, 1) (0, 0, 0, 1)) 'RQ1 editor mode' 400 50).Dt1[0].Data[0]
+    $v0 = ReadNs
+    "editor mode = $em, NS threshold = $v0"
+    if ($v0 -lt 0) { throw 'NS threshold not readable' }
+    $alt = if ($v0 -ge 50) { $v0 - 3 } else { $v0 + 3 }
+    try {
+      # --- B4: does the amp echo a DT1 we wrote? ---
+      foreach ($pass in 1..3) {
+        $val = if ($pass % 2) { $alt } else { $v0 }
+        $w = Ask (Dt1 $nsAddr (, [byte]$val)) "DT1 NS threshold = $val (echo check $pass)" 800 300
+        $echo = @($w.Dt1 | Where-Object { $_.Lin -eq (Lin $nsAddr) })
+        "write {0}: amp sent {1} message(s) within 800 ms, echo at 20 00 58 01: {2}; read back {3}" -f $val, $w.Messages.Count, $echo.Count, (ReadNs)
+        $w.Messages | Select-Object -First 8 | ForEach-Object { "    +{0,5:N1} ms  {1}" -f ($_.T - $w.Messages[0].T), (Hex ($_.Data | Select-Object -First 24)) }
+      }
+
+      # --- B5: send pacing ---
+      # Burst of DT1 at a fixed gap with distinct values, then read back: the last value must stick and no
+      # error or unexpected message may appear. Then DT1 immediately followed by RQ1 (no gap).
+      "`n-- pacing: 20 DT1 per burst, values alternate around $v0, read back after each burst"
+      foreach ($gap in 20, 10, 5, 2, 0) {
+        $vals = 0..19 | ForEach-Object { if ($_ % 2) { $alt } else { $v0 } }
+        $vals[19] = $alt
+        foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+        Mark "pacing burst gap $gap ms"
+        $t0 = $midi.Now
+        foreach ($v in $vals) {
+          $msg = Dt1 $nsAddr (, [byte]$v); Record 'out' $midi.Now $msg; $midi.Send($msg)
+          if ($gap -gt 0) { $until = $midi.Now + $gap; while ($midi.Now -lt $until) { } }
+        }
+        $sendMs = $midi.Now - $t0
+        $in = $midi.Collect(300, 150); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+        $rb = ReadNs
+        "gap {0,2} ms: 20 DT1 sent in {1,6:N1} ms, amp sent {2} message(s), read back {3} (expected {4}) {5}" -f $gap, $sendMs, $in.Count, $rb, $alt, $(if ($rb -eq $alt) { 'OK' } else { 'MISMATCH' })
+        $null = Ask (Dt1 $nsAddr (, [byte]$v0)) 'DT1 NS threshold restore' 200 50
+      }
+
+      "`n-- DT1 immediately followed by RQ1, 10 rounds"
+      $ok = 0; $times = @()
+      foreach ($i in 1..10) {
+        $v = if ($i % 2) { $alt } else { $v0 }
+        foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+        $w = Dt1 $nsAddr (, [byte]$v); $q = Rq1 $nsAddr (0, 0, 0, 1)
+        $t0 = $midi.Now; Record 'out' $t0 $w; $midi.Send($w); Record 'out' $midi.Now $q; $midi.Send($q)
+        $in = $midi.Collect(400, 60); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+        $rep = @($in | ForEach-Object { ParseDt1 $_ } | Where-Object { $_ -and $_.Lin -eq (Lin $nsAddr) })
+        if ($rep.Count -and $rep[-1].Data[0] -eq $v) { $ok++; $times += ($rep[-1].T - $t0) }
+      }
+      "{0} of 10 reads returned the value written just before{1}" -f $ok, $(if ($times.Count) { (", reply after {0:N1} to {1:N1} ms" -f ($times | Measure-Object -Minimum).Minimum, ($times | Measure-Object -Maximum).Maximum) } else { '' })
+
+      "`n-- 20 pairs DT1 + RQ1 back to back without waiting (each reply must carry the value of its pair)"
+      foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+      Mark 'DT1+RQ1 pair burst x20'
+      $expect = @(); $t0 = $midi.Now
+      foreach ($i in 0..19) {
+        $v = $v0 - 10 + $i
+        $expect += $v
+        $w = Dt1 $nsAddr (, [byte]$v); $q = Rq1 $nsAddr (0, 0, 0, 1)
+        Record 'out' $midi.Now $w; $midi.Send($w); Record 'out' $midi.Now $q; $midi.Send($q)
+      }
+      $sendMs = $midi.Now - $t0
+      $in = $midi.Collect(1000, 300); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+      $got = @($in | ForEach-Object { ParseDt1 $_ } | Where-Object { $_ -and $_.Lin -eq (Lin $nsAddr) } | ForEach-Object { [int]$_.Data[0] })
+      "40 messages sent in {0:N1} ms, {1} NS messages back: {2}; expected {3} -> {4}" -f $sendMs, $got.Count, ($got -join ' '), ($expect -join ' '), $(if (($got -join ' ') -eq ($expect -join ' ')) { 'OK' } else { 'DIFFERENT' })
+      $null = Ask (Dt1 $nsAddr (, [byte]$v0)) 'DT1 NS threshold restore' 200 50
+
+      "`n-- 30 small RQ1 back to back (no gap), count replies"
+      foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+      Mark 'RQ1 burst x30'
+      $t0 = $midi.Now
+      foreach ($i in 1..30) { $q = Rq1 $nsAddr (0, 0, 0, 1); Record 'out' $midi.Now $q; $midi.Send($q) }
+      $sendMs = $midi.Now - $t0
+      $in = $midi.Collect(1000, 300); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+      "30 RQ1 sent in {0:N1} ms, {1} replies, last after {2:N1} ms" -f $sendMs, $in.Count, $(if ($in.Count) { $in[-1].T - $t0 } else { 0 })
+
+      "`n-- 5 full patch RQ1 back to back (large replies), count blocks"
+      foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+      Mark 'full patch RQ1 burst x5'
+      $t0 = $midi.Now
+      foreach ($i in 1..5) { $q = Rq1 (0x20, 0, 0, 0) (0, 2, 0, 0); Record 'out' $midi.Now $q; $midi.Send($q) }
+      $in = $midi.Collect(1500, 500); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+      $d = @($in | ForEach-Object { ParseDt1 $_ } | Where-Object { $_ })
+      "{0} DT1 received (5 x 80 = 400 expected), {1} distinct addresses, last after {2:N0} ms" -f $d.Count, @($d | Group-Object Lin).Count, $(if ($in.Count) { $in[-1].T - $t0 } else { 0 })
+    }
+    finally {
+      $null = Ask (Dt1 $nsAddr (, [byte]$v0)) 'DT1 NS threshold restore (final)' 300 100
+      "`nrestored NS threshold, read back: " + (ReadNs) + " (original $v0)"
+    }
     return
   }
 
