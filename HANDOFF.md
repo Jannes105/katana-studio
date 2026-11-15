@@ -1,3 +1,6 @@
+> **Hinweis (15.11.2026):** Dieses Dokument ist die Vorgeschichte und teilweise überholt (Web-App/PWA, Name und GitHub damals offen).
+> Es gilt **PLAN.md**: Android-App mit Capacitor, Name „Katana Studio“.
+
 # Handoff: Eigenes Tone Studio für BOSS Katana 100 Gen 3
 
 ## Ziel
