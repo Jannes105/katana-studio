@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Katana Studio – USB test</title>
+<style>
+  :root { --bg:#121417; --card:#1c1f24; --fg:#e8e8e8; --mut:#8a9099; --acc:#f39c12; --ok:#2ecc71; --err:#e74c3c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; padding:16px; max-width:720px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:var(--mut); margin:0 0 16px; font-size:13px; }
+  p.note { color:var(--mut); margin:6px 0; font-size:13px; }
+  section { background:var(--card); border-radius:10px; padding:14px; margin-bottom:12px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--acc); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  button { background:var(--acc); color:#111; border:0; border-radius:8px; padding:12px 14px; min-height:48px; font-weight:600; font-size:15px; margin:4px 4px 4px 0; touch-action:manipulation; }
+  button.sec { background:#2c313a; color:var(--fg); }
+  button.warn { background:var(--err); color:#fff; }
+  button:disabled { opacity:.4; }
+  .status { font-weight:600; margin-top:6px; overflow-wrap:anywhere; }
+  .big { font:600 20px ui-monospace, monospace; letter-spacing:1px; margin:4px 0; min-height:1.45em; overflow-wrap:anywhere; }
+  .ok { color:var(--ok); } .err { color:var(--err); } .info { color:var(--mut); }
+  .in { color:#7fd3ff; } .out { color:#ffd27f; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; }
+  .grid label, .field label { display:block; font-size:12px; color:var(--mut); margin-bottom:2px; }
+  select, input.hex { background:#0e1013; color:var(--fg); border:1px solid #333a44; border-radius:6px; padding:10px 8px; min-height:44px; font:14px ui-monospace, monospace; width:100%; }
+  .switch { display:flex; align-items:center; gap:10px; font-size:14px; min-height:44px; }
+  .switch input { width:24px; height:24px; accent-color:var(--acc); flex:none; }
+  .disabled { opacity:.4; pointer-events:none; }
+  details { margin-top:8px; }
+  summary { color:var(--mut); font-size:13px; cursor:pointer; padding:8px 0; }
+  .ctl { margin:14px 0 6px; padding-top:10px; border-top:1px solid #2c313a; }
+  .ctl:first-of-type { border-top:0; padding-top:0; }
+  .ctlhead { display:flex; justify-content:space-between; align-items:baseline; font-size:15px; }
+  .ctlhead output { font:600 24px ui-monospace, monospace; color:var(--acc); }
+  .strip { position:relative; height:60px; margin:6px 0; background:#0e1013; border:1px solid #333a44; border-radius:8px; overflow:hidden; touch-action:pan-y; user-select:none; -webkit-user-select:none; cursor:ew-resize; }
+  .strip .fill { position:absolute; inset:0 auto 0 0; width:0; background:rgba(243,156,18,.35); pointer-events:none; }
+  .strip .hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--mut); font-size:13px; pointer-events:none; }
+  .strip.dragging { border-color:var(--acc); }
+  .steps { display:flex; gap:8px; }
+  .steps button { flex:1; margin:0; min-height:56px; font-size:18px; }
+  .stats { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:14px; margin:6px 0; }
+  .stats dt { color:var(--mut); } .stats dd { margin:0; font-family:ui-monospace, monospace; }
+  #log { background:#0b0c0e; border-radius:8px; padding:10px; height:55vh; min-height:260px; overflow:auto; font:12px/1.5 ui-monospace, monospace; white-space:pre-wrap; word-break:break-all; margin-top:8px; }
+  footer { color:var(--mut); font-size:12px; margin:16px 0 24px; text-align:center; }
+  a { color:var(--acc); }
+</style>
+</head>
+<body>
+<h1>Katana Studio – USB test</h1>
+<p class="sub">Feasibility test: talk to a Katana 100 Gen 3 over the USB cable. Work through the sections from top to bottom, then tap “Copy log” and keep the log.</p>
+
+<section>
+  <h2>1 · Device</h2>
+  <div id="transportInfo" class="status info">Starting …</div>
+  <button id="btnSelect" disabled>Select Katana</button>
+  <button id="btnSelectAny" class="sec" disabled>Any device</button>
+  <button id="btnDump" class="sec" disabled>Dump descriptors</button>
+  <div id="deviceInfo" class="status info">No device selected.</div>
+</section>
+
+<section id="secOpen" class="disabled">
+  <h2>2 · Open / claim</h2>
+  <p class="note">“Auto” picks the interface with a bulk or interrupt IN and OUT endpoint (vendor class 0xFF preferred). Override it if the identity request gets no reply.</p>
+  <div class="grid">
+    <div><label for="selItf">Interface</label><select id="selItf"><option value="auto">Auto</option></select></div>
+    <div><label for="selAlt">Alternate setting</label><select id="selAlt" disabled></select></div>
+    <div><label for="selIn">IN endpoint</label><select id="selIn" disabled></select></div>
+    <div><label for="selOut">OUT endpoint</label><select id="selOut" disabled></select></div>
+  </div>
+  <button id="btnOpen">Open</button>
+  <button id="btnClose" class="sec" disabled>Close</button>
+  <div id="openInfo" class="status info">Not open.</div>
+</section>
+
+<section id="secIdentity" class="disabled">
+  <h2>3 · Identity request</h2>
+  <div class="field"><label for="selCable">USB-MIDI cable number (first nibble of every packet)</label>
+    <select id="selCable"></select></div>
+  <button id="btnIdentity">Send identity request</button>
+  <div id="identityInfo" class="status info">Not asked yet.</div>
+</section>
+
+<section id="secRead" class="disabled">
+  <h2>4 · Read</h2>
+  <button id="btnRead">Read editor level, patch, name</button>
+  <div id="patch" class="big"></div>
+  <div id="readInfo" class="status info"></div>
+  <p class="note">Reading works without editor mode. These two buttons write to the amp (DT1 7F 00 00 01):</p>
+  <button id="btnEditorOn" class="sec" disabled>Editor mode on</button>
+  <button id="btnEditorOff" class="sec" disabled>Editor mode off</button>
+  <details>
+    <summary>Custom read request (for experiments)</summary>
+    <div class="field"><label for="addr">Address (4 bytes, hex)</label><input class="hex" id="addr" value="20 00 58 00" autocapitalize="off" autocomplete="off"></div>
+    <div class="field"><label for="size">Size (4 bytes, hex, 7-bit notation)</label><input class="hex" id="size" value="00 00 00 03" autocapitalize="off" autocomplete="off"></div>
+    <button class="sec" id="btnCustom">Read</button>
+  </details>
+</section>
+
+<section id="secTiming" class="disabled">
+  <h2>5 · Timing</h2>
+  <button id="btnMeasure">Measure full patch read</button>
+  <div id="timingInfo" class="status info">Expected on the PC: 80 DT1, 2649 data bytes, 0.27 s.</div>
+</section>
+
+<section id="secSliders" class="disabled">
+  <h2>6 · Rehearsal controls</h2>
+  <div id="writeInfo" class="status info">Writing is disabled until the identity reply was verified.</div>
+  <button id="btnOverride" class="warn" hidden>Enable writing anyway</button>
+  <button id="btnReadValues" class="sec">Read values from amp</button>
+  <p class="note">Drag sideways on a strip or use the buttons. Tapping a strip does not change the value.</p>
+  <div id="controls"></div>
+</section>
+
+<section id="secStability" class="disabled">
+  <h2>7 · Stability</h2>
+  <dl class="stats">
+    <dt>Connected for</dt><dd id="stConnected">–</dd>
+    <dt>Disconnects</dt><dd id="stDisconnects">0</dd>
+    <dt>Keep-alive polls</dt><dd id="stPolls">–</dd>
+    <dt>Last data from amp</dt><dd id="stLastRx">–</dd>
+    <dt>Transfers / bytes in</dt><dd id="stTraffic">–</dd>
+  </dl>
+  <div class="switch"><input type="checkbox" id="chkKeepAlive"><label for="chkKeepAlive">Keep-alive poll (identity request every 10 s)</label></div>
+  <div class="switch"><input type="checkbox" id="chkWake"><label for="chkWake">Keep the screen on while this page is visible</label></div>
+</section>
+
+<section>
+  <h2>Log <span><button class="sec" id="btnCopy">Copy log</button><button class="sec" id="btnClear">Clear</button></span></h2>
+  <div class="switch"><input type="checkbox" id="chkRaw" checked><label for="chkRaw">Log raw USB transfers</label></div>
+  <div id="log"></div>
+</section>
+
+<footer>
+  Unofficial hobby project, not affiliated with BOSS/Roland. BOSS and Katana are trademarks of Roland Corporation.<br>
+  <a href="../index.html">All test pages</a>
+</footer>
+
+<script>
+// Classic script on purpose: it still works when the module below fails to load or parse,
+// and there is no debugger on the phone.
+(function () {
+  function show(text) {
+    if (typeof window.katanaReportError === 'function') return window.katanaReportError(text);
+    var line = document.createElement('div');
+    line.className = 'err';
+    line.textContent = text;
+    document.getElementById('log').appendChild(line);
+  }
+  window.addEventListener('error', function (e) {
+    show('Script error: ' + (e.message || 'unknown') + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    show('Unhandled rejection: ' + (r && r.name ? r.name + ': ' : '') + (r && r.message ? r.message : String(r)));
+  });
+  setTimeout(function () {
+    if (!window.katanaPageReady) show('The page script did not start. The module files (page.js, usb-core.js, transports.js, ../shared/katana.js) may be missing or blocked.');
+  }, 4000);
+})();
+</script>
+<script type="module" src="./page.js"></script>
+</body>
+</html>

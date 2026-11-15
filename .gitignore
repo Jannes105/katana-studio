@@ -19,3 +19,16 @@ captures/
 # OS files
 .DS_Store
 Thumbs.db
+
+# USB test app (usbtest/): copied web files and Android build output
+usbtest/www/
+usbtest/android/.gradle/
+usbtest/android/build/
+usbtest/android/app/build/
+usbtest/android/local.properties
+usbtest/android/.idea/
+usbtest/android/capacitor-cordova-android-plugins/
+usbtest/android/app/src/main/assets/public/
+usbtest/android/app/src/main/assets/capacitor.config.json
+usbtest/android/app/src/main/assets/capacitor.plugins.json
+*.apk
