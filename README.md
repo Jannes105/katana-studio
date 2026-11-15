@@ -1,8 +1,8 @@
 # Katana Studio
 
-*für BOSS Katana Gen 3*
+*for BOSS Katana Gen 3*
 
-Eigener Editor für den BOSS Katana 100 Gen 3 per USB-Kabel, als Android-App.
-Plan und Architektur: [docs/PLAN.md](docs/PLAN.md).
+A custom editor for the BOSS Katana 100 Gen 3 over a USB cable, as an Android app.
+Plan and architecture (in German): [docs/PLAN.md](docs/PLAN.md).
 
-> Inoffizielles Hobbyprojekt, nicht von BOSS/Roland. BOSS und Katana sind Marken der Roland Corporation.
+> Unofficial hobby project, not affiliated with BOSS/Roland. BOSS and Katana are trademarks of Roland Corporation.

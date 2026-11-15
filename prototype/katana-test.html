@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -34,18 +34,18 @@
 </head>
 <body>
 <h1>Katana Remote Test</h1>
-<p class="sub">Katana Gen 3 per USB-Kabel steuern. Änderungen wirken sofort, werden aber erst dauerhaft, wenn du den Patch am Amp speicherst.</p>
+<p class="sub">Control a Katana Gen 3 over a USB cable. Changes take effect immediately but only become permanent once you save the patch on the amp.</p>
 
 <section>
-  <h2>Verbindung</h2>
-  <button id="btnConnect">Verbinden</button>
-  <div id="status" class="info">Nicht verbunden.</div>
+  <h2>Connection</h2>
+  <button id="btnConnect">Connect</button>
+  <div id="status" class="info">Not connected.</div>
   <div id="patch"></div>
 </section>
 
 <section id="secNs" class="disabled">
-  <h2>Noise Suppressor <button class="sec" id="btnReload">Neu lesen</button></h2>
-  <div class="switch"><input type="checkbox" id="nsSw"><label for="nsSw">An</label></div>
+  <h2>Noise Suppressor <button class="sec" id="btnReload">Reload</button></h2>
+  <div class="switch"><input type="checkbox" id="nsSw"><label for="nsSw">On</label></div>
   <div class="ctl"><label>Threshold <output id="nsThrV">–</output></label><input type="range" id="nsThr" min="0" max="100"></div>
   <div class="ctl"><label>Release <output id="nsRelV">–</output></label><input type="range" id="nsRel" min="0" max="100"></div>
 </section>
@@ -57,31 +57,31 @@
 </section>
 
 <section>
-  <h2>Log <span><button class="sec" id="btnCopy">Kopieren</button><button class="sec" id="btnClear">Leeren</button></span></h2>
+  <h2>Log <span><button class="sec" id="btnCopy">Copy</button><button class="sec" id="btnClear">Clear</button></span></h2>
   <details>
-    <summary>Eigene Leseanfrage (für Experimente)</summary>
-    <input class="hex" id="addr" value="20 00 58 00" aria-label="Adresse">
-    <input class="hex" id="size" value="00 00 00 03" aria-label="Länge">
-    <button class="sec" id="btnRead">Lesen</button>
+    <summary>Custom read request (for experiments)</summary>
+    <input class="hex" id="addr" value="20 00 58 00" aria-label="Address">
+    <input class="hex" id="size" value="00 00 00 03" aria-label="Size">
+    <button class="sec" id="btnRead">Read</button>
   </details>
   <div id="log"></div>
 </section>
 
 <script>
-// ---- Protokoll (aus BOSS TONE STUDIO for KATANA Gen 3) ----
+// ---- Protocol (derived from BOSS TONE STUDIO for KATANA Gen 3) ----
 const MODEL = [0x01, 0x05, 0x07];
 let DEV = 0x10;
 const ADDR = {
   editorLevel: [0x7F, 0x00, 0x00, 0x00],
   editorMode:  [0x7F, 0x00, 0x00, 0x01],
-  patchName:   [0x20, 0x00, 0x00, 0x00],  // 16 Zeichen
+  patchName:   [0x20, 0x00, 0x00, 0x00],  // 16 characters
   amp:         [0x20, 0x00, 0x06, 0x00],  // +0 Gain, +1 Volume
-  ns:          [0x20, 0x00, 0x58, 0x00],  // +0 Schalter, +1 Threshold, +2 Release
+  ns:          [0x20, 0x00, 0x58, 0x00],  // +0 switch, +1 threshold, +2 release
 };
 
 const $ = id => document.getElementById(id);
 let midi = null, input = null, output = null;
-const pending = new Map(); // key: Adresse als String -> resolve
+const pending = new Map(); // key: address as string -> resolve
 
 const hex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
 const parseHex = s => s.trim().split(/[\s,]+/).filter(Boolean).map(x => parseInt(x, 16));
@@ -112,7 +112,7 @@ function rq1(addr, size, note, timeout = 1500) {
   return new Promise((resolve, reject) => {
     pending.set(key(addr), resolve);
     send(roland(0x11, addr, [0, 0, 0, size]), note);
-    setTimeout(() => { if (pending.delete(key(addr))) reject(new Error('Keine Antwort auf ' + key(addr))); }, timeout);
+    setTimeout(() => { if (pending.delete(key(addr))) reject(new Error('No reply for ' + key(addr))); }, timeout);
   });
 }
 
@@ -126,16 +126,16 @@ function onMessage(e) {
     if (identityResolve) { identityResolve(d); identityResolve = null; }
     return;
   }
-  const h = 3 + MODEL.length; // Position des Befehls
+  const h = 3 + MODEL.length; // position of the command byte
   if (d[0] === 0xF0 && d[1] === 0x41 && d[h] === 0x12 && MODEL.every((m, i) => d[3 + i] === m)) {
     const addr = d.slice(h + 1, h + 5), data = d.slice(h + 5, d.length - 2);
     const r = pending.get(key(addr));
     if (r) { pending.delete(key(addr)); r(data); }
-    else applyIncoming(addr, data); // Amp meldet Änderung von sich aus
+    else applyIncoming(addr, data); // amp reports a change on its own
   }
 }
 
-// Vom Amp gemeldete Änderungen (z. B. Kanalwechsel, Regler am Amp) übernehmen
+// Apply changes reported by the amp (e.g. channel switch, knobs on the amp)
 function applyIncoming(addr, data) {
   const a = key(addr.slice(0, 3));
   if (a === key(ADDR.ns.slice(0, 3)) && addr[3] <= 2) {
@@ -145,7 +145,7 @@ function applyIncoming(addr, data) {
   } else if (a === key(ADDR.amp.slice(0, 3)) && addr[3] <= 1) {
     data.forEach((v, i) => showAmp(addr[3] + i, v));
   } else if (addr[0] === 0x00 || (addr[0] === 0x7F)) {
-    // Patchwechsel o. Ä. -> alles neu lesen
+    // patch change or similar -> re-read everything
     setTimeout(readAll, 150);
   }
 }
@@ -162,8 +162,8 @@ function showAmp(i, v) {
 
 async function readAll() {
   try {
-    const name = await rq1(ADDR.patchName, 16, 'Patch-Name');
-    $('patch').textContent = String.fromCharCode(...name).trim() || '(ohne Name)';
+    const name = await rq1(ADDR.patchName, 16, 'patch name');
+    $('patch').textContent = String.fromCharCode(...name).trim() || '(no name)';
     showNs(await rq1(ADDR.ns, 3, 'Noise Suppressor'));
     const amp = await rq1(ADDR.amp, 2, 'Gain/Volume');
     showAmp(0, amp[0]); showAmp(1, amp[1]);
@@ -172,32 +172,32 @@ async function readAll() {
 }
 
 async function connect() {
-  if (!navigator.requestMIDIAccess) return setStatus('Dieser Browser kann kein Web MIDI. Bitte Chrome verwenden.', 'err');
-  if (!window.isSecureContext) return setStatus('Seite braucht https oder localhost.', 'err');
+  if (!navigator.requestMIDIAccess) return setStatus('This browser does not support Web MIDI. Please use Chrome.', 'err');
+  if (!window.isSecureContext) return setStatus('This page needs https or localhost.', 'err');
   try {
     midi = await navigator.requestMIDIAccess({ sysex: true });
-  } catch (e) { return setStatus('MIDI-Zugriff verweigert: ' + e.message, 'err'); }
+  } catch (e) { return setStatus('MIDI access denied: ' + e.message, 'err'); }
   input = [...midi.inputs.values()].find(p => /katana/i.test(p.name));
   output = [...midi.outputs.values()].find(p => /katana/i.test(p.name));
-  if (!input || !output) return setStatus('Katana nicht gefunden. USB angeschlossen, Amp an, Boss Tone Studio geschlossen?', 'err');
+  if (!input || !output) return setStatus('Katana not found. USB connected, amp on, BOSS Tone Studio closed?', 'err');
   input.onmidimessage = onMessage;
-  setStatus('Begrüße Amp …', 'info');
+  setStatus('Greeting the amp …', 'info');
   try {
-    // 1. Identität
-    const id = new Promise((res, rej) => { identityResolve = res; setTimeout(() => rej(new Error('Keine Identitätsantwort')), 1500); });
-    send([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7], 'Identitätsabfrage');
+    // 1. Identity
+    const id = new Promise((res, rej) => { identityResolve = res; setTimeout(() => rej(new Error('No identity reply')), 1500); });
+    send([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7], 'identity request');
     await id;
-    // 2. Editor-Kommunikation wie BTS
-    await rq1(ADDR.editorLevel, 1, 'Editor-Level');
-    dt1(ADDR.editorMode, [0x01], 'Editor-Modus an');
+    // 2. Editor communication like BTS
+    await rq1(ADDR.editorLevel, 1, 'editor level');
+    dt1(ADDR.editorMode, [0x01], 'editor mode on');
     await new Promise(r => setTimeout(r, 100));
-    setStatus(`Verbunden mit ${input.name}`, 'ok');
-    $('btnConnect').textContent = 'Neu verbinden';
+    setStatus(`Connected to ${input.name}`, 'ok');
+    $('btnConnect').textContent = 'Reconnect';
     await readAll();
   } catch (e) { setStatus(e.message, 'err'); log(e.message, 'err'); }
 }
 
-// Regler -> Amp (gedrosselt, damit beim Ziehen nicht zu viele Nachrichten rausgehen)
+// Slider -> amp (throttled so dragging does not flood the amp with messages)
 function bindSlider(id, outId, addr) {
   let t = null;
   $(id).addEventListener('input', () => {
@@ -210,22 +210,22 @@ bindSlider('nsThr', 'nsThrV', addOfs(ADDR.ns, 1));
 bindSlider('nsRel', 'nsRelV', addOfs(ADDR.ns, 2));
 bindSlider('gain', 'gainV', addOfs(ADDR.amp, 0));
 bindSlider('vol', 'volV', addOfs(ADDR.amp, 1));
-$('nsSw').addEventListener('change', () => dt1(ADDR.ns, [$('nsSw').checked ? 1 : 0], 'NS an/aus'));
+$('nsSw').addEventListener('change', () => dt1(ADDR.ns, [$('nsSw').checked ? 1 : 0], 'NS on/off'));
 
 $('btnConnect').onclick = connect;
 $('btnReload').onclick = readAll;
 $('btnRead').onclick = async () => {
   const a = parseHex($('addr').value), s = parseHex($('size').value);
-  if (a.length !== 4 || s.length !== 4) return log('Adresse und Länge brauchen je 4 Bytes.', 'err');
-  try { const d = await rq1(a, s[3], 'eigene Anfrage'); log('   Daten: ' + hex(d) + '  = dezimal ' + d.join(', '), 'in'); }
+  if (a.length !== 4 || s.length !== 4) return log('Address and size need 4 bytes each.', 'err');
+  try { const d = await rq1(a, s[3], 'custom request'); log('   Data: ' + hex(d) + '  = decimal ' + d.join(', '), 'in'); }
   catch (e) { log(e.message, 'err'); }
 };
 $('btnClear').onclick = () => $('log').innerHTML = '';
 $('btnCopy').onclick = async () => {
-  try { await navigator.clipboard.writeText($('log').innerText); log('Log kopiert.'); }
-  catch { log('Kopieren nicht möglich.', 'err'); }
+  try { await navigator.clipboard.writeText($('log').innerText); log('Log copied.'); }
+  catch { log('Copy failed.', 'err'); }
 };
-window.addEventListener('beforeunload', () => { try { if (output) dt1(ADDR.editorMode, [0x00], 'Editor-Modus aus'); } catch {} });
+window.addEventListener('beforeunload', () => { try { if (output) dt1(ADDR.editorMode, [0x00], 'editor mode off'); } catch {} });
 </script>
 </body>
 </html>

@@ -1,9 +1,9 @@
-# Abhängigkeiten und Build
+# Dependencies and build output
 node_modules/
 dist/
 .vite/
 
-# Ausgepackte BOSS-Tone-Studio-Dateien (© Roland) – niemals ins Repo
+# Extracted BOSS Tone Studio files (© Roland) – never commit these
 tools/extract-bts.js
 bts-extract/
 bts-ui/
@@ -13,9 +13,9 @@ bts-ui/
 **/midi_controller.js
 **/liveset_converter.js
 
-# Mitschnitte vom Amp (können persönliche Patches enthalten)
+# Captures from the amp (may contain personal patches)
 captures/
 
-# Systemdateien
+# OS files
 .DS_Store
 Thumbs.db
