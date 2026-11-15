@@ -3,7 +3,8 @@
 The living reference for everything we know about the wire protocol. `docs/PLAN.md` says what we build;
 this file says what the amp actually does. Update it whenever an experiment gives a result.
 
-Tool for the experiments: `testpages/capture/` (Chrome on the PC, port "KATANA3", BOSS Tone Studio closed).
+Tools for the experiments: `tools/katana-probe.ps1` (PowerShell + winmm, used for most results) and
+`testpages/capture/` (Chrome on the PC); both on port "KATANA3" with BOSS Tone Studio closed.
 Checklist to work through: `docs/testplan/phase-0.md`.
 
 ## 1. Status legend
@@ -16,8 +17,8 @@ Every statement carries one of these:
 | **[D]** | Derived from analysis (how BOSS Tone Studio behaves, Linux driver source, Roland conventions). Not verified on the amp. |
 | **[O]** | Open. Nobody knows yet; see the question ID in section 5. |
 
-Test setup for everything marked [C] so far: Windows PC, Chrome, Web MIDI through the BOSS driver, amp in the
-normal ("Vendor") USB mode. Nothing has been measured on the phone yet.
+Test setup for everything marked [C]: Windows PC with the BOSS driver (Web MIDI in Chrome or winmm from
+`katana-probe.ps1`), amp in the normal ("Vendor") USB mode. Section 3 is measured on the phone with the test APK.
 
 ## 2. What is known
 
@@ -31,7 +32,7 @@ normal ("Vendor") USB mode. Nothing has been measured on the phone yet.
 | "Generic" USB mode (firmware 1.07 and later, hold [MOD] at power-on) | audio only, no MIDI, according to Roland; we stay in the normal mode | [D] |
 | Android MIDI | Android only creates a MIDI device for class Audio / subclass MIDI Streaming, so the amp will not show up as a MIDI device (checked in the framework source) | [D] |
 | Linux kernel | `snd-usb-audio` has a catch-all for `VID 0582` with class `FF` and detects MIDI through the Roland descriptor `06 24 F1 02 …`; if the phone kernel has it, it claims the interface | [D] |
-| USB-MIDI packet format (4-byte event packets) on the vendor interface | usual for Roland devices of this kind; unverified for the Gen 3 | [O] section 3 |
+| USB-MIDI packet format (4-byte event packets) on the vendor interface | standard packets, cable 0, interface 3 alt 0, bulk `0x03` / `0x84` | [C 2026-11-15] section 3 |
 
 ### 2.2 Identity request and reply
 
@@ -109,7 +110,7 @@ with its own test, because an off-by-one would write backups to the wrong slot.
 
 | Index | Channel | Stored at | Status |
 |---|---|---|---|
-| 0 | Panel (cannot be saved to) | `20 10 00 00` | [D]; name read there was "KATANA", plausible [C 2026-11-15 for the name only]; verify in Q6 |
+| 0 | Panel (cannot be saved to) | `20 10 00 00` | **[C 2026-11-15]** index ↔ slot: with PANEL selected, patch number `00 00`, 80 of 80 blocks identical (Q6); name "KATANA" |
 | 1 | A1 | `20 20 00 00` | **[C 2026-11-15]** index ↔ slot: 80 of 80 blocks identical (Q6); channel label confirmed by the owner (names match the channels) |
 | 2 | A2 | `20 30 00 00` | **[C 2026-11-15]** index ↔ slot: 80 of 80 blocks identical (Q6); channel label confirmed by the owner (names match the channels) |
 | 3 | A3 | `20 40 00 00` | **[C 2026-11-15]** index ↔ slot: 80 of 80 blocks identical (Q6); channel label confirmed by the owner (names match the channels) |
@@ -132,8 +133,11 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `06 00` + 1 | amp volume | `u7` | same as gain |
 | `06 00` + 2 | amp bass | `u7` | [D] |
 | `06 00` + 7 | amp type | `u7` | [D] |
-| `06 00` + 3 … 6 | further tone controls, exact order not written down | | [O] |
+| `06 00` + 0 … 4 | gain, volume, bass, middle, treble (knobs in panel order) | `u7` 0–100 | [C 2026-11-15] reported, Q3 |
 | `10 00` ff. | effect blocks (FX, delay, reverb …) | | [D], details open |
+| `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3 |
+| `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 presumably Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; +4 [D] |
+| `06 00` + 5 | presence (sixth amp knob) | `u7` | [C 2026-11-15] reported, Q3 |
 | `58 00` + 0 | noise suppressor switch | `u7` 0/1 | [D] |
 | `58 00` + 1 | noise suppressor threshold | `u7` 0–100 | **[C 2026-11-14]** written by DT1, change was audible |
 | `58 00` + 2 | noise suppressor release | `u7` 0–100 (range assumed) | [D] |
@@ -148,24 +152,27 @@ check the model code (`06`), RQ1 editor level (expect `1`), DT1 editor mode on. 
 | Address | Name (working label) | Use | Status |
 |---|---|---|---|
 | `7F 00 00 00` | editor level | RQ1, 1 byte; the amp answers `01` | [C 2026-11-15] |
-| `7F 00 00 01` | editor mode | DT1 `01` = on, `00` = off | [D]; the prototype has sent it, what it changes on the amp is Q8 |
+| `7F 00 00 01` | editor mode | DT1 `01` = on, `00` = off; not acknowledged, reads back by RQ1 size 1. **Required** for any report from the amp | [C 2026-11-15], Q8 |
 | `7F 00 00 02` | running mode | not used for the Gen 3 | [D] |
 | `7F 00 00 03` | revision | not used for the Gen 3 | [D] |
 | `7F 00 01 00` | PATCH_SELECT | DT1 with the patch index | [C 2026-11-15] for indexes 1–8, data `00 0n`; see Q6 for what the amp reports back |
-| `7F 00 01 04` | PATCH_WRITE | save the current patch; the amp is said to acknowledge with a DT1 at the same address | [D], Q2 |
+| `7F 00 01 04` | PATCH_WRITE | save the current patch; saving **on the amp** is reported here with the index as two nibbles | [C 2026-11-15] as a report (Q2); sending it from the PC is untested |
+| `7F 01 01 01` … `05` | five status bytes | reported on every patch change, save and colour change: colour of BOOSTER, MOD, FX, DELAY, REVERB (0–2), `03` = off | [C 2026-11-15], Q3 |
 | `7F 00 01 0E` | PATCH_CLEAR | clear a patch | [D], never sent |
 | unknown | EXPORT, PREVIEW_MUTE | sent by BOSS Tone Studio after saving and after restoring | [O] Q5; addresses not in our notes |
 
 - **Reading works without editor mode**: identity, patch name, patch number and editor level were all answered
   without switching it on. [C 2026-11-15]
-- Sign-off (editor mode off) cannot be guaranteed on Android, so "editor mode stays on" is the normal case. Its
-  effect on the amp is Q8.
-- A patch change on the amp is expected to be reported by a DT1 at `00 00 00 00` (patch number, `u2x4`), saving on
-  the amp by a DT1 at PATCH_WRITE. [D], Q1 and Q2.
+- The command area answers **single reads only** (size 1); a range RQ1 over it gets no reply. [C 2026-11-15]
+- Sign-off (editor mode off) cannot be guaranteed on Android, so "editor mode stays on" is the normal case; as
+  far as seen it is harmless. [C 2026-11-15], Q8
+- With editor mode on, a patch change on the amp is reported by a DT1 at `00 00 00 00` (patch number), saving on
+  the amp by a DT1 at PATCH_WRITE, knobs by DT1 at their parameter address. With editor mode off nothing is
+  reported. [C 2026-11-15], Q1–Q3 and Q8.
 
 ### 2.10 Measured timings (PC, BOSS driver, 2026-11-15, read-only)
 
-All [C 2026-11-15]. To be measured again on the phone in Phase 0a (section 3).
+All [C 2026-11-15]. On the phone the full patch took 0.284 s (section 3).
 
 | Measurement | Result |
 |---|---|
@@ -175,8 +182,8 @@ All [C 2026-11-15]. To be measured again on the phone in Phase 0a (section 3).
 | SYSTEM, one RQ1 (`10 00 00 00`) | 21 DT1, 131 data bytes, 23 ms |
 | Longest message | 238 bytes |
 
-Send pacing we use: 20 ms plus message length ÷ 3.125 ms between messages, as BOSS Tone Studio does [D]. Whether
-the amp needs this over USB has not been tested [O]. BOSS Tone Studio itself reads block by block (one RQ1 per
+Send pacing: BOSS Tone Studio waits 20 ms plus message length ÷ 3.125 ms between messages [D]. **The amp does not
+need this for small messages** [C 2026-11-15], see 2.13. BOSS Tone Studio itself reads block by block (one RQ1 per
 block, at most 128 bytes, 15 s timeout) and waits 500 ms after a patch change before reading [D]; neither is
 required for reading, as the range reads above show.
 
@@ -184,15 +191,16 @@ required for reading, as the range reads above show.
 
 - **One RQ1 can span many blocks.** The amp answers with one DT1 per block and skips the gaps between blocks.
   There is no end marker. [C 2026-11-15]
-- **Block order is not strictly ascending** (seen: contour blocks and two SYSTEM blocks swapped). Replies must be
-  matched by address, not by order. [C 2026-11-15]
-- **The amp sends unsolicited messages, even without editor mode**: in the middle of a request it sent the name,
-  the NS block and gain/volume of the current patch. The trigger is unknown. [C 2026-11-15], Q4
+- **Block order:** once not strictly ascending (first run: contour blocks and two SYSTEM blocks swapped); in every
+  later run on PC and phone ascending. Replies are still matched by address, not by order. [C 2026-11-15]
+- **Unsolicited messages come from editor mode.** The name/NS/gain blocks seen in the middle of a request in the
+  first run were reports of editor mode, left on by an earlier session (the probe later read the editor mode byte
+  as `01` without having written it). With editor mode off the amp sends nothing by itself. [C 2026-11-15], Q4/Q8
 - Consequence for tools: an unsolicited DT1 whose address lies inside the range of the outstanding RQ1 cannot be
   told apart from a reply. The capture tool counts it as a reply and lists addresses that arrive twice as
   "duplicates".
-- Whether knobs on the amp are reported is unknown [O] Q3. Until then the app re-reads when it comes to the
-  foreground.
+- Knobs on the amp are reported live with editor mode on [C 2026-11-15] Q3. Re-reading on return to the
+  foreground stays as a safety net.
 - Traffic of BOSS Tone Studio itself cannot be captured: the port is exclusive, and USBPcap/Wireshark only showed
   descriptors. [C 2026-11-14]
 
@@ -254,6 +262,31 @@ and it is the block table for backups (PLAN 4.6). What the blocks mean is only k
 Other areas: SYSTEM has 21 blocks at `10 00 00 00` … `10 00 28 00` (every `02 00`, block `10 00 2A 00` onward
 absent). The setup area answers a range read with a single block `00 00 00 00` = 2 bytes (patch number as two
 nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has three blocks (1, 5, 1 bytes).
+
+### 2.13 Writes: echo and send pacing (2026-11-15)
+
+`tools/katana-probe.ps1 -WriteTest`, PC, winmm through the BOSS driver. Only the NS threshold of the current patch
+(`20 00 58 01`) was written, around its value 40, and restored afterwards. Run once with editor mode off (capture
+`katana-probe-20261115-232749.json`) and once with editor mode on (`…232824.json`); the results were the same.
+
+| Test | Result |
+|---|---|
+| **Echo of our own DT1** (three writes, listen 800 ms each) | **No echo**, not a single message, with editor mode off **and on**. The value reads back as written. (Commands are different: PATCH_SELECT is echoed, see Q6.) [C 2026-11-15] |
+| 20 DT1 in a burst at 20 / 10 / 5 / 2 / 0 ms gap, then read back | Last value stuck every time, no error, nothing sent by the amp. At "0 ms" the driver needed about 1 ms per message (20 DT1 in 20 ms). [C 2026-11-15] |
+| DT1 immediately followed by RQ1, 10 rounds | 10 of 10 reads returned the value just written, reply after 4–5 ms. [C 2026-11-15] |
+| 20 pairs DT1 + RQ1 without any wait (40 messages in 46 ms) | All 20 replies arrived, **but late**: the first came after about 4 ms, the other 19 only once the burst was over (49–62 ms), all carrying the final value. The amp keeps taking messages while busy and answers queued RQ1 afterwards with the state at answer time. Nothing was lost. [C 2026-11-15] |
+| 30 small RQ1 back to back | 30 of 30 replies, the last after 39 ms. [C 2026-11-15] |
+| 5 full-patch RQ1 back to back | 400 of 400 DT1 (5 × 80 blocks), done after 1.33 s (5 × 0.27 s). [C 2026-11-15] |
+
+**Decisions:**
+- No echo, so rule 2 of PLAN 4.5 is not needed against echoes. The amp also does not acknowledge a parameter write;
+  a write is only verified by reading it back.
+- The 20 ms gap of BOSS Tone Studio is not needed for small DT1 and RQ1. The queue sends at once and coalesces
+  slider values per address; a slider naturally produces one value every 16–30 ms.
+- A reply describes the state at the moment the amp answers, not when the request was sent.
+- **Not tested:** large DT1 (whole blocks, up to 225 data bytes, as used for restoring a patch) and the same burst
+  over the phone's bulk endpoint, which may be faster than the PC driver. Until tested, large writes keep a gap
+  (check before Phase 1c), and the pair burst is repeated once with the test APK.
 
 ## 3. USB transport (Phase 0a, measured 2026-11-15 on the Nothing Phone (3a) Pro, Android API 37)
 
@@ -353,6 +386,12 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
   number message. The channel was saved unchanged onto itself, so the content comparison after saving a real
   change is still to do. With editor mode off nothing is reported (Q8).
 
+  ***2026-11-15, save with a real change (captures `katana-probe-20261115-234350.json`, `…234423.json`):*** on B4,
+  GAIN turned from 46 to 89 (reported live at `20 00 06 00`), then saved by holding B4. Same reports as above
+  (`7F 00 01 04` = `00 08`, then the status burst). Afterwards current patch and slot `21 10 00 00` are identical
+  in 80 of 80 blocks, and the slot holds the new gain (`21 10 06 00` = `59`). **Saving on the amp copies the
+  current patch into the slot of the current channel.** [C 2026-11-15]
+
 ### Q3: Knobs and buttons on the amp: reported or not, which addresses?
 
 - **Procedure (read-only):** "Take snapshot A", marker with the name of the control, move exactly one control,
@@ -380,6 +419,28 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
   Delay, Reverb, which matches the five-entry colour block of PLAN 4.4, but which knob was turned when was not
   logged, so the **naming is unverified**. The status bytes `7F 01 01 01`…`05` take `03` when the effect is off
   and 0–2 otherwise (presumably the colour of the active variation).
+
+  ***2026-11-15, one knob per run (captures `katana-probe-20261115-233135.json`, `…233312`, `…233340`, `…233409`,
+  `…233438`), editor mode on:*** **naming confirmed**, k = 0…4 is BOOSTER, MOD, FX, DELAY, REVERB.
+
+  | k | Knob | On/off switch | Parameters moved by the knob | Status byte |
+  |---|---|---|---|---|
+  | 0 | BOOSTER | `20 00 08 00` | `20 00 0A 01` (up), `20 00 0A 06` (down, 65 → 54) | `7F 01 01 01` |
+  | 1 | MOD | `20 00 08 01` | `20 00 1D 37` and `20 00 1D 3B` (parallel, 10 apart) | `7F 01 01 02` |
+  | 2 | FX | `20 00 08 02` | `20 00 23 19` | `7F 01 01 03` |
+  | 3 | DELAY | `20 00 08 03` | `20 00 28 05` (down), `20 00 28 07` (up) | `7F 01 01 04` |
+  | 4 | REVERB | **`20 00 08 05`** | `20 00 34 0A` | `7F 01 01 05` |
+
+  Each knob also reports its position at `30 00 02 0k` and `20 01 1C 0k`. Turning a knob to zero switches the
+  effect off (switch `00`, status byte `03`); turning it up from zero switches it on again. **Correction:** the
+  reverb switch is `08 05`, not `08 04`; the switch block `20 00 08 00` has 6 bytes, and byte 4 is presumably the
+  Delay 2 switch (Delay 2 hangs on the reverb variation, PLAN 4.4) [D].
+
+  ***Effect buttons (captures `…233705` to `…233841` and `…234036` to `…234124`):*** a short press on the button
+  of an effect that is **on** cycles its colour 0 → 1 → 2 → 0. The amp reports the colour block
+  `20 00 04 0k` (5 bytes, one per effect in the order above) and the status byte `7F 01 01 0(k+1)` with the same
+  value. On an effect that is **off** (dark LED) the button does nothing and nothing is reported. Holding the button
+  reports nothing. **So the status bytes are confirmed: 0–2 = colour of the active variation, 3 = off.** [C 2026-11-15]
 
   **Decision:** with editor mode on, re-reading on return to the foreground is a safety net, not a necessity.
   Whether the amp reports the same with editor mode **off** is the open half of this question; if it does not,
@@ -433,7 +494,7 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
 
 | Selected on the amp | Patch number read | Slot compared | Identical | Name in that slot |
 |---|---|---|---|---|
-| PANEL | not tested | `20 10 00 00` | | `KATANA` |
+| PANEL | `00 00` | `20 10 00 00` | yes, 80 of 80 | `KATANA` |
 | A1 | `00 01` | `20 20 00 00` | yes, 80 of 80 | `COMP CLEAN` |
 | A2 | `00 02` | `20 30 00 00` | yes, 80 of 80 | `TSR Pushed` |
 | A3 | `00 03` | `20 40 00 00` | yes, 80 of 80 | `STADIUM LEAD` |
@@ -446,7 +507,9 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
 
 **Confirmed 2026-11-15 for A1–B4** (capture `katana-probe-20261115-182243.json`): each channel was selected from
 the PC by PATCH_SELECT (`katana-probe.ps1 -SelectTest`), then patch number and current patch were read and compared
-with the slot. Index n lives in PATCH(n+1) for n = 1…8. Only PANEL (index 0) is still unproven by comparison.
+with the slot. Index n lives in PATCH(n+1) for n = 1…8. **PANEL (index 0) confirmed 2026-11-15** (capture
+`katana-probe-20261115-234713.json`): selected on the amp, patch number `00 00`, current patch identical with
+`20 10 00 00` in 80 of 80 blocks. The mapping index n → PATCH(n+1) now holds for 0…8.
 
 **PATCH_SELECT works as assumed** (same run, editor mode byte was `01`): DT1 `7F 00 01 00` with data `00 0n`
 switches the channel. The amp answers within about 147 ms with 12 messages, always the same pattern:
@@ -505,6 +568,10 @@ same messages, and what happens with editor mode off.
   B4, save on B4) was equally silent. With editor mode on, the same actions are all reported (Q1, Q2, Q3).
   Switching it back on (`01`) is also unacknowledged and reads back `01`.
 
+  ***2026-11-15, power cycle:*** editor mode had been left on (`01`) at the end of the session above. After the
+  owner switched the amp off and on again, it read `00` (first line of capture `katana-probe-20261115-232749.json`).
+  **A power cycle resets editor mode to off.** [C 2026-11-15]
+
   **Decision: the app must switch editor mode on when it connects.** Without it the app would not notice channel
   changes, knobs or saving on the amp. Reading and PATCH_SELECT work either way. Leaving it on is harmless as far
   as seen (the amp ran normally with it on for a long time), so signing off stays best-effort as in PLAN 4.3.
@@ -525,8 +592,8 @@ same messages, and what happens with editor mode off.
 |---|---|
 | Is the patch number at `00 00 00 00` really two nibble bytes, and how big is that block? | "Read patch number" on several channels; compare with the DT1 seen in Q1. |
 | Encoding of the PATCH_SELECT value (`u2x4` or `u2x7`) | Not distinguishable for indexes 1–8; note what the amp reports back after "Select patch". |
-| Does the amp echo our own DT1 writes? | Move the NS threshold slider and look for UNSOLICITED lines. |
-| Is the BTS send pacing needed over USB? | Not planned for Phase 0; note any lost replies. |
+| ~~Does the amp echo our own DT1 writes?~~ | **No**, with editor mode off and on (2.13). |
+| ~~Is the BTS send pacing needed over USB?~~ | **No** for small messages on the PC (2.13); large DT1 and the phone still to check. |
 | Meaning of identity bytes 6–9 and 11–13 | Compare with another Katana model if one is ever at hand. |
 
 ## 6. Legal note

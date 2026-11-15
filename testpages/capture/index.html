@@ -136,7 +136,10 @@ exclusive on Windows). Unofficial hobby project, not affiliated with BOSS/Roland
   <h2>Hunt for the firmware version <span class="tag">no writes</span></h2>
   <button data-conn data-read id="btnFirmware">Dump candidate areas</button>
   <p class="hint">Reads SYSTEM, 16 bytes from <code>7F 00 00 00</code> and shows the identity reply. It only dumps;
-  finding the version in there is up to you.</p>
+  finding the version in there is up to you.<br>
+  <strong>Note:</strong> the amp does not answer a range read over the command area, so the <code>7F 00 00 00</code>
+  part stays empty. Those bytes answer only one at a time (use "Custom RQ1" with size 1, or
+  <code>tools/katana-probe.ps1</code>, which reads them singly).</p>
   <pre class="result" id="fwResult"></pre>
 </section>
 
