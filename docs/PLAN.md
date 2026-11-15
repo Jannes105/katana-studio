@@ -31,6 +31,9 @@ Gespielt wird auf den **Kanälen A1–B4**, Panel wird nicht genutzt.
 | Repo und Verteilung | **Öffentliches GitHub-Repo** (Konto `Jannes105`). APKs als **GitHub Releases**. GitHub Pages nur für Testseiten. |
 | Rechtliches | Keine Roland-Dateien im Repo (auch nicht in Teilen), keine BOSS-Logos/-Grafiken, eigene Parameterliste. Hinweis in README und App: *„Inoffizielles Hobbyprojekt, nicht von BOSS/Roland. BOSS und Katana sind Marken der Roland Corporation.“* `.gitignore` schließt Auspack-Ordner und `tools/extract-bts.js` aus (das Werkzeug bleibt lokal). |
 | Sprache | **Englisch:** Code, Bezeichner, Kommentare, Commit-Nachrichten, README und `docs/protocol-notes.md` (so ist es üblich). **Deutsch:** nur `PLAN.md` und `HANDOFF.md` als Arbeitsdokumente. **Oberfläche der App:** Englisch als Grundsprache, Deutsch als zweite Sprache; die App folgt der Handy-Sprache und lässt sich in den Einstellungen umschalten. Parameternamen bleiben in beiden Sprachen **englisch wie am Amp** (Gain, Bass, Threshold …). Die Texte liegen gesammelt an einer Stelle, je Sprache eine Tabelle, von Anfang an. |
+| Arbeitsweise im Repo | **Branch und Pull Request**, kein direktes Arbeiten auf `main`. `main` ist geschützt: Die CI muss grün sein, kein Force-Push, Squash-Merge, gemergt wird von dir. (Entscheidung 16.11.2026) |
+| Test-App | `usbtest/` wird **gelöscht**, sobald die echte App den USB-Teil übernommen hat und in der Probe funktioniert. Bis dahin bleibt sie für Probe und Fehlersuche. Das Kotlin-Plugin wandert in die echte App. (Entscheidung 16.11.2026) |
+| Versionen | **Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21.** Alles Weitere (Gradle, Android-Gradle-Plugin, Node) wird nicht eigens festgeschrieben. (Entscheidung 16.11.2026) |
 | Datenhaltung | Der **Amp ist die Wahrheit** für den aktuellen Klang. Was nur in der App existiert (Backups, später Bibliothek, Setlisten), lässt sich jederzeit als Datei exportieren. |
 | Kanalwechsel mit Ungespeichertem | **Einfach wechseln**, wie am Amp: ohne Rückfrage, nichts blockiert. Die App **merkt sich aber die ungespeicherten Änderungen** des verlassenen Kanals und bietet sie dort als Leiste an („Änderungen von A2 zurückholen“). Am Amp sind sie weg, in der App nicht: sonst löscht ein Fehltipp das Feintuning, und das gilt laut Abschnitt 1 als gescheitert. |
 
@@ -460,6 +463,8 @@ Einstellungen und im Protokoll-Export. Neue Versionen lädst du von der Release-
 **Signierschlüssel:** Jede APK wird damit signiert. Er liegt als verschlüsseltes Geheimnis in GitHub und **zusätzlich bei dir**
 (Passwort-Manager oder USB-Stick). Geht er verloren, gehen Updates nur noch per Deinstallieren, und dabei verschwinden die
 App-Daten. Deshalb wird er gesichert, bevor die erste signierte APK aufs Handy kommt.
+Die Workflows lesen ihn aus den Geheimnissen `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` und
+`ANDROID_KEY_ALIAS`.
 
 ## 7. Risiken
 
@@ -549,12 +554,19 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 
 **D. Entwicklungsumgebung und Repo**
 
-16. **Signierschlüssel** erzeugen, doppelt sichern (Passwort-Manager und USB-Stick), als Geheimnis in GitHub
-    hinterlegen. Muss fertig sein, bevor die erste signierte APK aufs Handy kommt.
-17. **Lokaler Build:** JDK 21 und Android-Kommandozeilen-Werkzeuge auf dem PC, `adb` über WLAN mit dem Handy
-    koppeln. Bisher baut nur CI (gut zwei Minuten je Versuch); für die Arbeit am USB-Plugin ist das zu langsam.
-18. **Arbeitsweise im Repo festlegen:** direkt auf `main` oder über Branch und Pull Request. Schutz für `main`,
-    damit nur grüne Stände hineinkommen.
+16. ~~**Signierschlüssel**~~ *erledigt 16.11.2026:* erzeugt (PKCS12, RSA 4096, Alias `katana-studio`), Passwort im
+    Passwort-Manager, Datei auf USB-Stick und an einem zweiten Ort. In GitHub als Geheimnisse
+    `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` und `ANDROID_KEY_ALIAS` (Schlüssel-Passwort = Passwort
+    der Datei).
+17. ~~**Lokaler Build**~~ *erledigt 16.11.2026:* Temurin JDK 21.0.13, Android-Kommandozeilen-Werkzeuge 23.0
+    (Einrichtung per `tools/setup-android-sdk.ps1`), SDK-Pakete `platform-tools`, `platforms;android-36`,
+    `build-tools;35.0.0`. `usbtest/` baut lokal (erster Lauf 2:42 min). `adb` ist über WLAN mit dem Handy gekoppelt
+    und findet es selbst im Netz. Hinweise: `sdkmanager` ist durch das Programm `android` ersetzt (immer mit
+    `--no-metrics` aufrufen); ein lokaler Debug-Build hat einen anderen Schlüssel als der CI-Build.
+18. ~~**Arbeitsweise im Repo festlegen**~~ *entschieden 16.11.2026:* Branch und Pull Request, `main` geschützt
+    (siehe Abschnitt 2). Eingerichtet 16.11.2026: Die Workflows laufen auch bei Pull Requests; Pflicht-Prüfung ist
+    der Job `test` (Tests der Testseiten), der Test-APK-Build läuft nur bei Änderungen an `usbtest/` und ist keine
+    Pflicht. Kommt die echte App, wird ihr CI-Job zur Pflicht-Prüfung.
 19. **CI aufräumen:** Die Workflows nutzen Actions-Versionen, die GitHub als veraltet meldet (Node 20).
 20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
     (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
@@ -562,11 +574,10 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 
 **E. Entscheidungen**
 
-21. **Verhältnis von Test-App und echter App:** Vorschlag: `usbtest/` bleibt als eigene Test-App bestehen (für die
-    Probe und für spätere USB-Fehlersuche). Die echte App entsteht im Wurzelverzeichnis und übernimmt das
-    Kotlin-Plugin als Kopie.
-22. **Versionen festschreiben:** Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21 (so baut die
-    Test-APK heute).
+21. ~~**Verhältnis von Test-App und echter App**~~ *entschieden 16.11.2026:* `usbtest/` wird gelöscht, sobald
+    die echte App (im Wurzelverzeichnis) den USB-Teil übernommen hat (siehe Abschnitt 2).
+22. ~~**Versionen festschreiben**~~ *entschieden 16.11.2026:* Capacitor 8, `minSdk 29`, `targetSdk 36`,
+    Kotlin 2.2.20, JDK 21.
 23. **Schema der Parameterliste** (4.4) als Entwurf, zumindest für die Blöcke von Phase 1b (Amp, Booster, Delay,
     Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle.
 
@@ -574,7 +585,7 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 
 - A (Dokumente) erledigt ist und der Plan dem gemessenen Stand entspricht,
 - aus B mindestens die Punkte 4 und 5 beantwortet sind (sie bestimmen Warteschlange und State-Regeln),
-- der Signierschlüssel gesichert ist (16) und der lokale Build läuft (17),
-- die Entscheidungen 18, 21 und 22 getroffen sind.
+- der Signierschlüssel gesichert ist (16, erledigt) und der lokale Build läuft (17, erledigt),
+- die Entscheidungen 18, 21 und 22 getroffen sind (erledigt 16.11.2026).
 
 Alles andere (Rest von B, C, 19, 20, 23) kann parallel zu 0b laufen.

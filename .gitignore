@@ -32,3 +32,8 @@ usbtest/android/app/src/main/assets/public/
 usbtest/android/app/src/main/assets/capacitor.config.json
 usbtest/android/app/src/main/assets/capacitor.plugins.json
 *.apk
+
+# Signing keys: never in the repo (kept by the owner, CI gets them as secrets)
+*.jks
+*.keystore
+*.p12
