@@ -255,36 +255,56 @@ Other areas: SYSTEM has 21 blocks at `10 00 00 00` … `10 00 28 00` (every `02 
 absent). The setup area answers a range read with a single block `00 00 00 00` = 2 bytes (patch number as two
 nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has three blocks (1, 5, 1 bytes).
 
-## 3. USB transport (fill in during Phase 0a)
+## 3. USB transport (Phase 0a, measured 2026-11-15 on the Nothing Phone (3a) Pro, Android API 37)
 
-Nothing here is known yet. Source for the values: the WebUSB test page `testpages/usb/` or the test APK.
+**Result: the phone talks to the amp through the test APK.** Chrome (WebUSB) can open the device and read its
+descriptors but cannot claim the MIDI interface; the Android USB host API with `force` can.
 
-| Item | Value | Date | Source (WebUSB / APK) |
-|---|---|---|---|
-| Number of interfaces, class/subclass of each | | | |
-| MIDI interface number | | | |
-| Alternate setting used for MIDI | | | |
-| OUT endpoint: address, type (bulk/interrupt), max packet size | | | |
-| IN endpoint: address, type (bulk/interrupt), max packet size | | | |
-| Cable number in the USB-MIDI packet | | | |
-| USB-MIDI 4-byte packet format confirmed? (yes/no, deviations) | | | |
-| Several packets per transfer seen? | | | |
-| Web MIDI in Chrome on the phone (five-minute attempt) | | | |
-| WebUSB result (opened? interface claimed? error text) | | | |
-| Test APK result (`claimInterface` with force needed?) | | | |
-| Identity reply received on the phone | | | |
-| Patch name read on the phone | | | |
-| NS threshold written, audible | | | |
-| Full patch read time on the phone (PC: 0.27 s) | | | |
-| OTG: connection stable for 15 minutes? OTG setting needed? | | | |
-| Battery drain per hour with the app in the foreground | | | |
-| Hum or noise through the cable | | | |
-| Phone notification sounds audible through the amp? | | | |
+| Item | Value | Source |
+|---|---|---|
+| Device | VID `0582` PID `02F0`, class `FF/00/FF`, USB 2.0, one configuration, 4 interfaces, self-powered (maxPower 0 mA) | WebUSB + APK |
+| Interface 0 | class `FF/FF/00`, no endpoints | both |
+| Interface 1 | class `FF/02/02`, alt 1: isochronous OUT `0x0D` (audio to the amp) | both |
+| Interface 2 | class `FF/02/01`, alt 1: isochronous IN `0x8E` (audio from the amp) | both |
+| **MIDI interface** | **interface 3**, class `FF/03/00`, carries the Roland descriptor `06 24 F1 02 01 01` | both |
+| Alternate setting used | **alt 0** (bulk). Alt 1 offers the same OUT `0x03` plus IN `0x85` as interrupt endpoints; not needed, not tested | APK |
+| OUT endpoint | `0x03`, bulk, max packet 512 | APK |
+| IN endpoint | `0x84`, bulk, max packet 512 | APK |
+| Cable number | **0** in both directions | APK |
+| Packet format | **standard 4-byte USB-MIDI event packets confirmed** (CIN 4 / 5 / 6 / 7 for SysEx). The unused bytes of a short final packet are **not** zeroed by the amp (they repeat earlier data); harmless, because the CIN gives the length | APK |
+| Several packets per transfer | yes, e.g. 40 bytes = 10 packets for the patch name; 124 transfers for a full patch | APK |
+| Web MIDI in Chrome on the phone | not tried separately (the device is vendor class, see WebUSB) | |
+| WebUSB in Chrome | `device.open()` ok, descriptors readable, `claimInterface(3)` fails with `NetworkError: Unable to claim interface` (three attempts). The kernel driver holds the interface | WebUSB |
+| Test APK | permission dialog once, `claimInterface(force)` true, `setInterface(alt 0)` true | APK |
+| Identity reply | `F0 7E 10 06 02 41 07 05 00 00 06 00 00 00 F7`, 18 ms after the request | APK |
+| Reads | editor level `01`, patch number `00 01`, patch name "COMP CLEAN", gain/volume, NS threshold; 8–22 ms each | APK |
+| NS threshold written | DT1 `20 00 58 01` sent while dragging, about every 32 ms, no send errors. **Audible, confirmed by the owner** | APK |
+| Full patch read on the phone | **80 DT1, 2649 data bytes, 0.284 s**, ascending, no duplicates (PC: 0.27 s). One-shot reading stays (PLAN 4.5 rule 4) | APK |
+| OTG stable for 15 minutes, OTG setting | open | |
+| Battery drain per hour | open | |
+| Hum or noise through the cable | open | |
+| Phone notification sounds through the amp | open (the amp exposes audio interfaces 1 and 2, so Android may route sound to it) | |
 
-Raw descriptor dump (paste the log of the test page here or reference a file under `captures/`):
+Consequences for the app (PLAN 4.2): the Kotlin plugin is needed (no WebUSB, no Web MIDI route). Claim interface
+3 with force, alternate setting 0, bulk endpoints `0x03` / `0x84`, cable 0. The auto-pick rule of the test plugin
+(vendor class, IN and OUT bulk or interrupt, no isochronous endpoint) chose correctly.
+
+Raw descriptors (206 bytes, device descriptor followed by the configuration):
 
 ```
-(empty)
+0000: 12 01 00 02 FF 00 FF 40 82 05 F0 02 00 01 01 02
+0010: 00 01 09 02 BC 00 04 01 00 C0 00 09 04 00 00 00
+0020: FF FF 00 00 09 04 01 00 00 FF 02 02 00 06 24 F1
+0030: 01 00 00 09 04 01 01 01 FF 02 02 00 07 24 01 01
+0040: 00 03 00 0B 24 02 01 04 04 20 01 80 BB 00 06 24
+0050: F1 04 16 00 07 05 0D 05 84 00 01 07 25 01 00 00
+0060: 00 00 09 04 02 00 00 FF 02 01 00 09 04 02 01 01
+0070: FF 02 01 00 07 24 01 07 00 03 00 0B 24 02 01 04
+0080: 04 20 01 80 BB 00 06 24 F1 04 16 00 07 05 8E 25
+0090: 84 00 01 07 25 01 00 00 00 00 09 04 03 00 02 FF
+00A0: 03 00 00 06 24 F1 02 01 01 07 05 03 02 00 02 01
+00B0: 07 05 84 02 00 02 00 09 04 03 01 02 FF 03 00 00
+00C0: 07 05 03 03 00 02 04 07 05 85 03 00 02 04
 ```
 
 ## 4. How to run an experiment
