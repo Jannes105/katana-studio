@@ -1,7 +1,7 @@
 # Katana Studio – Projektplan
 
 *Katana Studio: eigener Editor für den BOSS Katana 100 Gen 3 per USB-Kabel, als Android-App.*
-Stand: 15.11.2026, nach Prüfung durch drei Reviewer überarbeitet · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
+Stand: 15.11.2026, nach mehreren Prüfrunden und ersten Messungen am Amp überarbeitet · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
 
 ---
 
@@ -168,7 +168,7 @@ nötig ist es nicht.
 - Eingehende Roland-Nachrichten werden mit der gelernten Device-ID **und** mit `7F` akzeptiert (wie BTS).
 - **Abmelden** (Editor-Modus aus) versucht die App beim bewussten Trennen und beim Wechsel in den Hintergrund nach längerer
   Zeit. Auf Android gibt es aber kein verlässliches „App wird beendet“, und nach dem Abziehen lässt sich nichts mehr senden.
-  **„Editor-Modus bleibt an“ ist also der Normalfall.** Was das am Amp bewirkt, wird schon in 0a am PC mit dem Prototyp
+  **„Editor-Modus bleibt an“ ist also der Normalfall.** Was das am Amp bewirkt, wird in „Phase 0 am PC“ mit dem Prototyp
   geprüft (Tab ohne Abmelden schließen, Amp bedienen, neu verbinden) und als Entscheidung in `protocol-notes.md` festgehalten.
 - **Befehle:** Patch wählen (`PATCH_SELECT`), speichern (`PATCH_WRITE`, der Amp quittiert per DT1 an derselben Adresse),
   löschen. BTS sendet nach dem Speichern und nach dem Zurückspielen zusätzlich `PREVIEW_MUTE` und `EXPORT`. Deren Wirkung
@@ -426,14 +426,14 @@ App-Daten. Deshalb wird er gesichert, bevor die erste signierte APK aufs Handy k
 | Google verlangt ab 2027 auch beim Sideloading einen verifizierten Entwickler | Vor 2027 prüfen, ob sich der Schlüssel mit dem kostenlosen Hobby-Konto registrieren lässt. Installation per ADB bleibt als Ausweg. |
 | Datenverlust in der App | Datei-Export von Anfang an, Rohbyte-Format mit Versionsnummer. |
 | Fehlerhaftes Update kurz vor der Probe | Releases nur per Versions-Tag, Installation nur von Hand. |
-| Firmware-Update ändert das Protokoll | Modellcode und Editor-Level prüfen. In 0b klären, wo der Amp seine Firmware-Version meldet, und dann beim Verbinden mit der Version der Parameterliste vergleichen. |
+| Firmware-Update ändert das Protokoll | Modellcode und Editor-Level prüfen (bei Abweichung nur lesend, siehe 4.3). In „Phase 0 am PC“ klären, wo der Amp seine Firmware-Version meldet, und dann beim Verbinden mit der Version der Parameterliste vergleichen. |
 | Markenbeschwerde wegen öffentlichem Repo | Kein „BOSS“ im Titel, Hinweis „inoffiziell“, keine Logos, kein Auspack-Werkzeug im Repo. Bei Beschwerde umbenennen. |
 
 ## 8. Offen, wird in Phase 0 geklärt
 
 - USB: Interface, Altsetting, Endpunkte, Paketformat (0a).
 - Akku, OTG, Kabel am Nothing Phone (3a) Pro (0a).
-- Am PC mit dem Prototyp (0a): Verhalten, wenn der Editor-Modus an bleibt.
+- Am PC mit dem Prototyp (Phase 0 am PC): Verhalten, wenn der Editor-Modus an bleibt.
 - Per eigenem Mitschnitt (Phase 0 am PC): Meldungen bei Patchwechsel, Speichern und Reglern am Amp; Wirkung von `EXPORT` und
   `PREVIEW_MUTE`; Zuordnung Index → `PATCH(n+1)` für die übrigen Kanäle; wo die Firmware-Version steht; Tuner-Daten;
   was die unaufgeforderten Meldungen des Amps auslöst (4.2b).
