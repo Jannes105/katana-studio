@@ -439,3 +439,92 @@ App-Daten. Deshalb wird er gesichert, bevor die erste signierte APK aufs Handy k
   was die unaufgeforderten Meldungen des Amps auslöst (4.2b).
 - Am Handy nachmessen (0a): Dauer einer Bereichsanfrage über den ganzen Patch.
 - **Schon geklärt (4.2b):** Bereichsanfragen, Lesezeiten, Lesen ohne Editor-Modus, Index 9 = Vorschau-Platz.
+
+## 9. Stand und Vorbereitung für Phase 0b
+
+Stand 15.11.2026 abends. Einzelheiten und Mitschnitt-Namen stehen in `docs/protocol-notes.md`.
+
+### 9.1 Erledigt
+
+- **Phase 0a:** Fertig-Kriterium erfüllt. Die Test-APK (`usbtest/`) liest und schreibt am Amp, die Änderung am
+  NS-Threshold war hörbar. WebUSB im Chrome scheitert am belegten Interface, das Kotlin-Plugin ist also nötig.
+  USB-Werte: Interface 3, Altsetting 0, Bulk OUT `0x03` / IN `0x84`, Kabelnummer 0, normales USB-MIDI-Paketformat.
+  Ganzer Patch am Handy in 0,284 s.
+- **Phase 0 am PC:** Der Amp meldet Kanalwechsel, Regler und Speichern von sich aus, aber **nur mit Editor-Modus an**.
+  Zuordnung Index → `PATCH(n+1)` für A1–B4 bestätigt. `PATCH_SELECT` funktioniert. Blocktabelle eines Patches
+  (80 Blöcke) liegt vor.
+- Werkzeuge: Testseiten, Mitschnitt-Werkzeug, `tools/katana-probe.ps1`, CI für Test-APK und Pages.
+
+### 9.2 Vor dem Start von 0b nötig
+
+**A. Dokumente nachziehen** (reine Schreibarbeit, kein Amp nötig)
+
+1. Diesen Plan an die Messungen anpassen. Überholt sind:
+   - 4.2 / 4.2a: USB-Werte eintragen, WebUSB als Weg streichen. „Fertig, wenn alle Blockadressen da sind“ ist jetzt
+     umsetzbar, weil die Blocktabelle existiert.
+   - 4.2b: Die Reihenfolge der Blöcke war in allen neuen Läufen aufsteigend. Die „unaufgeforderten Meldungen“ sind
+     die Meldungen des Editor-Modus.
+   - 4.3: Editor-Modus einschalten ist **Pflicht** (nicht nur BTS-Nachbau), der Zustand ist zurücklesbar, das
+     Umschalten wird nicht quittiert. Meldungen bei Kanalwechsel (`00 00 00 00` und Status-Bytes `7F 01 01 01`–`05`)
+     und beim Speichern (`7F 00 01 04`) eintragen. Der Befehlsbereich `7F 00 00 0x` antwortet nur auf Einzelabfragen.
+   - 4.5: Regel 5 (Neu-Lesen) ist nur noch Sicherheitsnetz. Regel 3: Wartezeit nach Patchwechsel neu festlegen.
+   - 4.6: Die Bereichsanfrage über alle Speicherplätze liefert den Vorschau-Platz mit; er muss herausgefiltert werden.
+   - Abschnitt 8: Liste der offenen Punkte kürzen.
+2. `docs/testplan/phase-0.md` abhaken, den Tuner-Punkt als entfallen markieren.
+3. Im Mitschnitt-Werkzeug vermerken, dass „Dump candidate areas“ im Befehlsbereich nichts zeigt.
+
+**B. Restliche Protokollfragen, die die State-Schicht betreffen** (am Amp, zusammen etwa eine halbe Stunde)
+
+4. **Echo beim Schreiben:** Meldet der Amp einen Wert zurück, den die App per DT1 geschrieben hat? Davon hängt
+   Regel 2 in 4.5 ab (300 ms ignorieren).
+5. **Sendeabstand über USB:** Braucht der Amp die 20 ms von BTS, oder geht es schneller? Bestimmt, wie flüssig ein
+   Regler wirkt.
+6. **Die fünf Effekt-Regler einzeln:** je ein Regler pro Durchlauf, damit die Zuordnung Index → Booster, Mod, FX,
+   Delay, Reverb bewiesen ist. Dabei die Bedeutung der Status-Bytes klären (vermutet: Farbe der Variation, 3 = aus).
+7. **Effekt-Taster am Amp:** an/aus und Farbwechsel, welche Adressen ändern sich.
+8. **Speichern mit echter Änderung:** danach aktuellen Patch und Speicherplatz vergleichen.
+9. **Editor-Modus nach Aus- und Einschalten des Amps:** bleibt er an oder nicht.
+10. **Panel:** Zuordnung Index 0 durch Vergleich prüfen.
+
+Nicht nötig für 0b, kommt später: `PATCH_WRITE` vom PC aus (vor 1c), `EXPORT` / `PREVIEW_MUTE` (Phase 4),
+Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
+
+**C. Am Handy** (Rest von 0a, geht nebenbei in einer Probe)
+
+11. 15 Minuten angesteckt: bleibt die Verbindung, braucht es eine OTG-Einstellung?
+12. Akkuverbrauch über eine feste Zeit.
+13. Brummen durch das Kabel bei Probenlautstärke.
+14. Kommen Benachrichtigungstöne des Handys aus dem Amp? (Der Amp meldet sich auch als Audio-Gerät.)
+15. Eine Probe mit der Test-APK und ihren drei Reglern. Danach die Reihenfolge in 1b noch einmal ansehen.
+
+**D. Entwicklungsumgebung und Repo**
+
+16. **Signierschlüssel** erzeugen, doppelt sichern (Passwort-Manager und USB-Stick), als Geheimnis in GitHub
+    hinterlegen. Muss fertig sein, bevor die erste signierte APK aufs Handy kommt.
+17. **Lokaler Build:** JDK 21 und Android-Kommandozeilen-Werkzeuge auf dem PC, `adb` über WLAN mit dem Handy
+    koppeln. Bisher baut nur CI (gut zwei Minuten je Versuch); für die Arbeit am USB-Plugin ist das zu langsam.
+18. **Arbeitsweise im Repo festlegen:** direkt auf `main` oder über Branch und Pull Request. Schutz für `main`,
+    damit nur grüne Stände hineinkommen.
+19. **CI aufräumen:** Die Workflows nutzen Actions-Versionen, die GitHub als veraltet meldet (Node 20).
+20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
+    (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
+    -Werte öffentlich im Repo stehen dürfen, oder ob sie ersetzt werden.
+
+**E. Entscheidungen**
+
+21. **Verhältnis von Test-App und echter App:** Vorschlag: `usbtest/` bleibt als eigene Test-App bestehen (für die
+    Probe und für spätere USB-Fehlersuche). Die echte App entsteht im Wurzelverzeichnis und übernimmt das
+    Kotlin-Plugin als Kopie.
+22. **Versionen festschreiben:** Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21 (so baut die
+    Test-APK heute).
+23. **Schema der Parameterliste** (4.4) als Entwurf, zumindest für die Blöcke von Phase 1b (Amp, Booster, Delay,
+    Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle.
+
+### 9.3 Bereit für die Implementierung, wenn
+
+- A (Dokumente) erledigt ist und der Plan dem gemessenen Stand entspricht,
+- aus B mindestens die Punkte 4 und 5 beantwortet sind (sie bestimmen Warteschlange und State-Regeln),
+- der Signierschlüssel gesichert ist (16) und der lokale Build läuft (17),
+- die Entscheidungen 18, 21 und 22 getroffen sind.
+
+Alles andere (Rest von B, C, 19, 20, 23) kann parallel zu 0b laufen.
