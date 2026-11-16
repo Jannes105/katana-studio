@@ -16,7 +16,7 @@ export class MockDevice implements DeviceTransport {
   private readonly listeners = new Set<MessageListener>();
   private readonly eventListeners = new Set<(e: DeviceEvent) => void>();
 
-  constructor(readonly amp: MockAmp = new MockAmp()) {
+  constructor(readonly amp: MockAmp = new MockAmp({ content: 'demo' })) {
     amp.onMessage((m) => {
       if (this.stateValue !== 'open') return;
       for (const l of this.listeners) l(m);

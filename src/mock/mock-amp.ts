@@ -22,6 +22,7 @@ import {
 import { KNOWN_AREAS, PATCH_BLOCKS } from '../protocol/blocks';
 import { patchName, u2x4 } from '../protocol/encoding';
 import { IDENTITY_REQUEST, buildDt1, parseMessage } from '../protocol/sysex';
+import { DEMO_PATCHES, writeDemoPatch } from './demo-patches';
 
 export const MOCK_DEVICE_ID = 0x10;
 export const MOCK_IDENTITY_REPLY: readonly number[] = [
@@ -57,6 +58,11 @@ export interface MockAmpOptions {
   readonly modelCode?: number;
   /** Editor level at 7F 00 00 00 (1 on the real amp). */
   readonly editorLevel?: number;
+  /**
+   * Memory content: 'neutral' (default, for tests: names "MOCK n", all amp knobs 50, NS threshold 40) or
+   * 'demo' (invented patches with different amp types and effects, for trying the UI; demo-patches.ts).
+   */
+  readonly content?: 'neutral' | 'demo';
 }
 
 /** One block of memory: area base + block offset, with its bytes. */
@@ -95,9 +101,14 @@ export class MockAmp implements Transport {
     this.blocks.push({ address: ADDR.patchNumber, data: [0, 0] });
     this.blocks.sort((a, b) => a.address - b.address);
 
-    // Neutral content: no real patch data in the repository.
+    // Neutral or invented content: no real patch data in the repository.
     for (let i = 0; i <= PREVIEW_INDEX; i++) {
       const base = storedPatchAddress(i);
+      const demo = DEMO_PATCHES[i];
+      if (options.content === 'demo' && demo) {
+        writeDemoPatch((a, d) => this.poke(a, d), base, demo);
+        continue;
+      }
       const name = i === PANEL_INDEX ? 'PANEL' : i === PREVIEW_INDEX ? 'PREVIEW' : `MOCK ${i}`;
       this.poke(base, patchName.encode(name));
       this.poke(base + addr(0, 0, 0x06, 0x00), [50, 50, 50, 50, 50, 50]); // amp knobs

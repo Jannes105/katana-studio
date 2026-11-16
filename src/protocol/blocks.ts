@@ -2,12 +2,29 @@
 // so a request is complete once every expected block address has arrived (PLAN 4.2). Backups store raw bytes
 // per block with the same boundaries (PLAN 4.6).
 
-import { ADDR, PREVIEW_INDEX, SIZE, addr, storedPatchAddress, type Address } from './address';
+import { ADDR, PREVIEW_INDEX, SIZE, addr, fromLinear, storedPatchAddress, type Address } from './address';
 
 export interface Block {
+  /** Stable key of the block inside its area (see blockKey); used by the file format (PLAN 4.6). */
+  readonly key: string;
   /** Offset from the area base, linear. */
   readonly offset: number;
   readonly length: number;
+}
+
+/**
+ * Stable key of a block: its offset from the area base as three 7-bit digits in hex, e.g. `000600` for the amp
+ * block `06 00` and `011E00` for the last patch block. The layout is the device's, so the key never changes.
+ */
+export function blockKey(offset: number): string {
+  return fromLinear(offset)
+    .slice(1)
+    .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+    .join('');
+}
+
+function block(offset: number, length: number): Block {
+  return { key: blockKey(offset), offset, length };
 }
 
 /**
@@ -18,7 +35,7 @@ function rows(spec: readonly (readonly [number, number, number, number])[]): rea
   const out: Block[] = [];
   for (const [b1, b2, count, length] of spec) {
     const first = addr(0, b1, b2, 0);
-    for (let i = 0; i < count; i++) out.push({ offset: first + i * addr(0, 0, 0x02, 0), length });
+    for (let i = 0; i < count; i++) out.push(block(first + i * addr(0, 0, 0x02, 0), length));
   }
   return out;
 }
@@ -68,7 +85,7 @@ export const PATCH_BLOCKS: readonly Block[] = rows([
 /** The 21 blocks of SYSTEM (131 data bytes), measured 2026-11-15. */
 export const SYSTEM_BLOCKS: readonly Block[] = [
   1, 5, 2, 2, 2, 2, 11, 11, 11, 11, 11, 11, 3, 5, 5, 3, 1, 5, 1, 19, 9,
-].map((length, i) => ({ offset: i * addr(0, 0, 0x02, 0), length }));
+].map((length, i) => block(i * addr(0, 0, 0x02, 0), length));
 
 /** An area of the memory map with a known block layout. */
 export interface Area {
