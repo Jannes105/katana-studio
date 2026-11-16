@@ -1,6 +1,16 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Version: the name comes from package.json (the one place, PLAN 6); the code from the release workflow's run number,
+// so it rises with every release build. Local builds use 1.
+def appVersionName = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
+def appVersionCode = (System.getenv('KATANA_VERSION_CODE') ?: '1') as Integer
+
+// Release signing only when the release workflow provides the keystore (secrets ANDROID_KEYSTORE_*).
+// Without it a release build stays unsigned; nothing secret is ever read from the repository.
+def keystoreFile = System.getenv('KATANA_KEYSTORE_FILE')
+def hasReleaseKey = keystoreFile != null && !keystoreFile.isEmpty()
+
 android {
     namespace = "io.github.jannes105.katanastudio"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,16 +18,28 @@ android {
         applicationId "io.github.jannes105.katanastudio"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseKey) {
+                storeFile file(keystoreFile)
+                storePassword System.getenv('KATANA_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KATANA_KEY_ALIAS')
+                // The key password equals the keystore password (PLAN 9.2 D 16).
+                keyPassword System.getenv('KATANA_KEYSTORE_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseKey) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
