@@ -13,7 +13,7 @@
   import Sheet from './Sheet.svelte';
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
-  import { exportFile, fileMeta } from './export';
+  import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
   import { hasPatch, rememberedHere } from './view';
 
   type Page = 'probe' | 'fx' | 'log';
@@ -45,6 +45,26 @@
       const file = await connection.readBackup(fileMeta(s));
       await exportFile(file, t(lang, 'backup.title'));
       fileNote = { ok: true, text: t(lang, 'backup.done') };
+    } catch (error) {
+      fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async function tslPatch(): Promise<void> {
+    fileNote = null;
+    try {
+      await exportPatchTsl(connection.currentPatchFile(fileMeta(s)), t(lang, 'tsl.title'));
+      fileNote = { ok: true, text: t(lang, 'tsl.done') };
+    } catch (error) {
+      fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async function tslChannels(): Promise<void> {
+    fileNote = null;
+    try {
+      await exportChannelsTsl(await connection.readBackup(fileMeta(s)), t(lang, 'tsl.title'));
+      fileNote = { ok: true, text: t(lang, 'tsl.done') };
     } catch (error) {
       fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
     }
@@ -220,6 +240,14 @@
       <button disabled={!shown} onclick={() => void savePatch()}>{t(lang, 'backup.patch')}</button>
     </div>
     <p class="sublabel">{t(lang, 'backup.hint')}</p>
+    <div class="pair">
+      <button disabled={!shown} onclick={() => void tslPatch()}>{t(lang, 'tsl.patch')}</button>
+      <button
+        disabled={s.phase !== 'connected' || s.reading || s.backingUp}
+        onclick={() => void tslChannels()}>{t(lang, 'tsl.channels')}</button
+      >
+    </div>
+    <p class="sublabel">{t(lang, 'tsl.hint')}</p>
     {#if fileNote}
       <p class="detail" class:error={!fileNote.ok}>{fileNote.text}</p>
     {/if}

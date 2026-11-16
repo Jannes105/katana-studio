@@ -4,7 +4,8 @@ import { Capacitor } from '@capacitor/core';
 import { APP_VERSION } from '../app-info';
 import type { FileMeta } from '../state/backup';
 import type { ConnectionState } from '../state/connection';
-import { toJson, type KatanaFile } from '../storage/format';
+import { toJson, type BackupFile, type KatanaFile, type PatchFile } from '../storage/format';
+import { toTsl } from '../storage/tsl';
 import { shareTextFile } from '../storage/files-android';
 
 export function fileMeta(s: ConnectionState, now = new Date()): FileMeta {
@@ -25,8 +26,29 @@ export function fileName(file: KatanaFile, now = new Date()): string {
 }
 
 export async function exportFile(file: KatanaFile, title: string): Promise<void> {
-  const name = fileName(file);
-  const text = toJson(file);
+  await exportText(fileName(file), toJson(file), title);
+}
+
+const safe = (text: string): string => text.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** The current patch as a one-patch .tsl for BOSS Tone Studio. */
+export async function exportPatchTsl(file: PatchFile, title: string): Promise<void> {
+  const name = file.current.name || 'patch';
+  const text = toTsl(name, [{ blocks: file.current.blocks }]);
+  await exportText(`katana-${safe(file.current.channel)}-${safe(name) || 'patch'}.tsl`, text, title);
+}
+
+/** The channels A1–B4 of a backup as one .tsl (eight patches in channel order). */
+export async function exportChannelsTsl(file: BackupFile, title: string): Promise<void> {
+  const patches = [1, 2, 3, 4, 5, 6, 7, 8].flatMap((i) => {
+    const e = file.slots.get(i);
+    return e ? [{ memo: `${e.channel} ${e.name}`.trim(), blocks: e.blocks }] : [];
+  });
+  const stamp = fileName(file).replace(/^katana-backup-|.json$/g, '');
+  await exportText(`katana-channels-${stamp}.tsl`, toTsl(`Katana A1-B4 ${stamp}`, patches), title);
+}
+
+async function exportText(name: string, text: string, title: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     await shareTextFile(name, text, title);
     return;

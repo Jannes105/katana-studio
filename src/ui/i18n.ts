@@ -72,6 +72,11 @@ const en = {
   'backup.done': 'Backup saved.',
   'backup.patchTitle': 'Patch file',
   'backup.patchDone': 'Patch saved.',
+  'tsl.title': 'File for BOSS Tone Studio',
+  'tsl.patch': 'This patch as .tsl',
+  'tsl.channels': 'A1–B4 as .tsl',
+  'tsl.hint': '.tsl files can be imported into the librarian of BOSS Tone Studio on the PC.',
+  'tsl.done': '.tsl saved.',
   'fact.lastRead': 'Last read',
 
   'action.retry': 'Try again',
@@ -174,6 +179,11 @@ const de: Record<TextKey, string> = {
   'backup.done': 'Backup gespeichert.',
   'backup.patchTitle': 'Patch-Datei',
   'backup.patchDone': 'Patch gespeichert.',
+  'tsl.title': 'Datei für BOSS Tone Studio',
+  'tsl.patch': 'Diesen Patch als .tsl',
+  'tsl.channels': 'A1–B4 als .tsl',
+  'tsl.hint': '.tsl-Dateien lassen sich am PC in die Bibliothek von BOSS Tone Studio importieren.',
+  'tsl.done': '.tsl gespeichert.',
   'fact.lastRead': 'Zuletzt gelesen',
 
   'action.retry': 'Nochmal versuchen',
