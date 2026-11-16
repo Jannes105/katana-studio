@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { ADDR, PANEL_INDEX, PREVIEW_INDEX, storedPatchAddress } from '../../src/protocol/address';
 import { parseHex, parseMessage } from '../../src/protocol/sysex';
 import { parseCapture } from '../../src/mock/capture';
-import { AMP_TYPE_NAMES } from '../../src/model/params';
+import { AMP_TYPE_NAMES, EFFECTS } from '../../src/model/params';
 import { PatchImage, patchView } from '../../src/model/patch';
 
 const DIR = join(__dirname, '..', '..', 'captures');
@@ -67,7 +67,11 @@ describe.skipIf(files.length === 0)('parameter list against real captures (local
       for (const e of v.effects) {
         expect([true, false], `${where} ${e.key}`).toContain(e.on);
         expect([0, 1, 2], `${where} ${e.key}`).toContain(e.colour);
-        for (const t of e.types) expect(t, `${where} ${e.key} type`).toBeLessThan(64);
+        for (const t of e.types) {
+          expect(t, `${where} ${e.key} type`).toBeLessThan(
+            EFFECTS.find((g) => g.key === e.key)?.typeNames.length ?? 0,
+          );
+        }
       }
     }
   });

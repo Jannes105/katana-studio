@@ -1,7 +1,8 @@
 // What the screens show, derived from the connection state. Plain functions (no Svelte), so they are testable.
 
-import { readRaw } from '../model/patch';
-import type { ParamDef } from '../model/schema';
+import { EFFECTS, effectType } from '../model/params';
+import { effectView, readRaw, type EffectView } from '../model/patch';
+import type { ParamDef, VariantGroup } from '../model/schema';
 import type { ByteChange, ConnectionState } from '../state/connection';
 
 export type Dot = 'ok' | 'warn' | 'error' | 'off' | 'busy';
@@ -37,6 +38,33 @@ export function paramView(s: ConnectionState, def: ParamDef): ParamView {
   const stored = s.unsavedKnown ? readRaw(s.stored, def) : undefined;
   const changed = value !== undefined && stored !== undefined && stored !== value;
   return { value, stored: changed && stored !== undefined ? stored : null, changed };
+}
+
+/** One effect for the list and its page: what the amp has now, and what differs from the stored slot. */
+export interface EffectRow extends EffectView {
+  readonly group: VariantGroup;
+  readonly switchChanged: boolean;
+  readonly colourChanged: boolean;
+  /** Type changed against the stored slot, by variation. */
+  readonly typeChanged: readonly boolean[];
+  /** Anything of this effect differs from the stored slot. */
+  readonly changed: boolean;
+}
+
+export function effectRows(s: ConnectionState): EffectRow[] {
+  return EFFECTS.map((g) => {
+    const typeChanged = [0, 1, 2].map((c) => paramView(s, effectType(g, c)).changed);
+    const switchChanged = paramView(s, g.switch).changed;
+    const colourChanged = paramView(s, g.colour).changed;
+    return {
+      ...effectView(s.current, g),
+      group: g,
+      switchChanged,
+      colourChanged,
+      typeChanged,
+      changed: switchChanged || colourChanged || typeChanged.some(Boolean),
+    };
+  });
 }
 
 /** Remembered unsaved changes of the channel now shown (PLAN 2). */

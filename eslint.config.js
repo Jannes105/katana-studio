@@ -44,7 +44,18 @@ const layerRules = Object.entries(FORBIDDEN).map(([layer, banned]) => ({
 }));
 
 export default ts.config(
-  { ignores: ['dist/', 'android/', 'usbtest/', 'testpages/', 'prototype/', 'tools/', 'captures/'] },
+  {
+    ignores: [
+      'dist/',
+      'android/',
+      'usbtest/',
+      'testpages/',
+      'prototype/',
+      'tools/',
+      'captures/',
+      'bts-extract/',
+    ],
+  },
   js.configs.recommended,
   ...ts.configs.strict,
   ...svelte.configs.recommended,

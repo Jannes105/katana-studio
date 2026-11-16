@@ -65,7 +65,8 @@ describe('parameter list (PLAN 4.4)', () => {
     expect(mod?.paramBlocks.map(blockKey)).toEqual(['001C00', '001E00', '002000']);
   });
 
-  it('effect types stay read-only until our table of names exists', () => {
+  it('effect types have our name tables and are writable within them', () => {
+    expect(EFFECTS.map((g) => g.typeNames.length)).toEqual([23, 31, 31, 8, 5]);
     for (const g of EFFECTS) {
       const t = effectType(g, 1);
       expect(t.readonly).toBe(g.typeNames.length === 0);

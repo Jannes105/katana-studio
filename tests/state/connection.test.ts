@@ -106,14 +106,22 @@ describe('AmpConnection: values, reports and "unsaved"', () => {
     expect(amp.peek(NS)).toEqual([100]);
   });
 
-  it('never writes read-only parameters (effect types without a name table)', async () => {
+  it('never writes read-only parameters', async () => {
     const { amp, connection } = await started();
-    const booster = EFFECTS[0];
-    if (!booster) throw new Error('no effects');
     const before = paramWrites(amp).length;
-    void connection.setValue(effectType(booster, 0), 3);
+    void connection.setValue({ ...NS_THRESHOLD, readonly: true }, 3);
     await tick(20);
     expect(paramWrites(amp).length).toBe(before);
+  });
+
+  it('clamps an effect type to its table of names', async () => {
+    const { amp, connection } = await started();
+    const reverb = EFFECTS.find((g) => g.key === 'reverb');
+    if (!reverb) throw new Error('no reverb');
+    const type = effectType(reverb, 0);
+    void connection.setValue(type, 99);
+    await tick(20);
+    expect(amp.peek(ADDR.currentPatch + type.at)).toEqual([reverb.typeNames.length - 1]);
   });
 
   it('follows a knob report from the amp, but not within 300 ms of an own write (rule 2)', async () => {

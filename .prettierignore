@@ -5,6 +5,7 @@ usbtest/
 prototype/
 tools/
 captures/
+bts-extract/
 android/
 dist/
 node_modules/
