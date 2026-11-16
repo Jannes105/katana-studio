@@ -134,10 +134,10 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `06 00` + 1 | amp volume | `u7` | same as gain |
 | `06 00` + 2 | amp bass | `u7` | [D] |
 | `06 00` + 0 … 4 | gain, volume, bass, middle, treble (knobs in panel order) | `u7` 0–100 | [C 2026-11-15] reported, Q3 |
-| `06 00` + 6 | power amp variation | `u7` 0/1 | [D] analysis (2026-11-16); 0 in every stored slot |
-| `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | [D] from the stored slots: the values fit the patch names (a "Crunch" patch 3, a "Pushed" patch 2, a lead patch 4, clean patches 1); same order by analysis (2026-11-16) |
-| `06 00` + 8 | resonance | `u7` 0–100 | [D] analysis; 50 in every stored slot |
-| `06 00` + 9 | amp variation | `u7` 0/1 | [D]; 0 or 1 in the stored slots |
+| `06 00` + 6 | power amp variation | `u7` 0/1 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
+| `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard (1 Clean → 2 Pushed); order also fits the stored slots and the analysis |
+| `06 00` + 8 | resonance | `u7` 0–100 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
+| `06 00` + 9 | amp variation | `u7` 0/1 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
 | `0A 00`, `0C 00`, `0E 00` | booster, one block per variation (colour 0, 1, 2); byte 0 = type | 8 bytes each | [D]; the booster knob moves `0A 01` and `0A 06` (Q3) |
 | `10 00`, `12 00`, `14 00` | mod type per variation, 0–30 (same type list as FX) | 1 byte each | [D] |
 | `16 00`, `18 00`, `1A 00` | FX type per variation, 0–30 | 1 byte each | [D] |
@@ -148,17 +148,54 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `40 00` + 0 | contour select: 0 off, 1–3 | `u7` 0–3 | [D] analysis; 0, 1 or 3 in the stored slots |
 | `42 00`, `44 00`, `46 00` | contour 1–3: byte 0 type (0–3), byte 1 freq shift (raw = shown + 50, −50…+50) | 2 bytes each | [D] analysis |
 | `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [D]; the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on; layer mode confirmed by analysis |
-| `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3 |
-| `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; +4 [D] analysis |
+| `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3; [C 2026-11-16] written for all five (`-ParamTest`), LED followed |
+| `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; [C 2026-11-16] written for all five (`-ParamTest`), LED followed; +4 [D] analysis |
 | `06 00` + 5 | presence (sixth amp knob) | `u7` | [C 2026-11-15] reported, Q3 |
-| `58 00` + 0 | noise suppressor switch | `u7` 0/1 | [D] |
+| `58 00` + 0 | noise suppressor switch | `u7` 0/1 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
 | `58 00` + 1 | noise suppressor threshold | `u7` 0–100 | **[C 2026-11-14]** written by DT1, change was audible |
-| `58 00` + 2 | noise suppressor release | `u7` 0–100 (range assumed) | [D] |
+| `58 00` + 2 | noise suppressor release | `u7` 0–100 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
 | `5A 00` | send/return | | [D] |
+| `5C 00` ff. | assigns | | [D] |
 
 Type ranges (by analysis, 2026-11-16, consistent with every stored slot in the captures): booster 0–22, mod and FX
 0–30 (one list), delay 0–7, reverb 0–4, amp type 0–5. The names are in our own tables in `src/model/params.ts`.
-| `5C 00` ff. | assigns | | [D] |
+
+**Inside a variation block** (booster, delay, reverb; offsets from the block of the active variation, byte 0 =
+type). From local analysis of BOSS Tone Studio (2026-11-16): layout and ranges from its address map, which knob
+shows for which type from its effect pages. Every value in every capture lies in these ranges. All [D].
+Ranges are raw values; "shown" is raw minus the offset.
+
+| Block | Byte | Parameter | Raw range | Shown / notes |
+|---|---|---|---|---|
+| booster | 1 | drive | 0–120 | |
+| booster | 2, 3 | bottom, tone | 0–100 | −50…+50 (raw = shown + 50) |
+| booster | 4 | solo switch | 0/1 | |
+| booster | 5, 6, 7 | solo level, effect level, direct mix | 0–100 | |
+| delay | 1–4 | time | `u4x4` 1–2000 | ms |
+| delay | 5 | feedback | 0–100 | |
+| delay | 6 | high cut | 0–14 | 630 Hz … 12.5 kHz, 14 = flat; not on the SDE-3000 page |
+| delay | 7 | effect level | 0–120 | |
+| delay | 8 | direct mix | 0–100 | "direct level" in the address map |
+| delay | 9 | tap time | 0–100 | %; PAN only |
+| delay | 10, 11 | mod rate, mod depth | 0–100 | MODULATE and SDE-3000 |
+| delay | 12 | range | 0/1 | 8 kHz / 17 kHz; called LPF in the address map; SDE-3000 only |
+| delay | 13 | filter | 0/1 | SDE-3000 only |
+| delay | 14, 15 | feedback phase, delay phase | 0/1 | normal / inverse; SDE-3000 only |
+| delay | 16 | mod switch | 0/1 | SDE-3000 only |
+| reverb | 1 | layer mode | 0–2 | Delay 2 / both / reverb (Phase 2) |
+| reverb | 2 | time | 0–99 | shown 1–100 (raw = shown − 1); unit unverified |
+| reverb | 3–6 | pre delay | `u4x4` 0–500 | ms |
+| reverb | 7 | low cut | 0–17 | 0 = flat, then 20 Hz … 800 Hz |
+| reverb | 8 | high cut | 0–14 | as delay |
+| reverb | 9 | density | 0–10 | |
+| reverb | 10, 11 | effect level, direct mix | 0–100 | |
+| reverb | 12 | spring color | 0–100 | SPRING only |
+
+**Checking a [D] address on the amp:** `tools/katana-probe.ps1 -ParamTest` (optionally `-Only <regex>`) goes
+through the list in the current patch: read, write a nearby value, read back, ask whether the change was heard or
+seen, write the original value back and read again. Variation parameters use the active variation. Results go to
+`captures/param-test-<time>.json`. The app writes only parameters marked [C] (`writable()` in
+`src/model/schema.ts`), so every address passes this check before the app can change it.
 
 ### 2.9 Editor handshake and commands
 

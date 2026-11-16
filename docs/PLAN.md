@@ -479,7 +479,7 @@ Gestaltung:
 - Besondere Störungen auf der Bühne wurden nicht genannt.
 
 **Schritt 2: Entwürfe** (16.11.2026): klickbar in `design.html` (nur Dev-Server, nicht in der APK; Code in
-`src/ui/design/`, zum Wegwerfen). Drei Richtungen für die Proben-Ansicht: **A Fader** (breite Balken, relativ
+`src/ui/design/`, zum Wegwerfen; mit 1b gelöscht, steht noch in der Git-Geschichte). Drei Richtungen für die Proben-Ansicht: **A Fader** (breite Balken, relativ
 ziehen, ±1), **B Kacheln** (große Zahlen, Antippen öffnet ein Blatt unten mit Wischfläche und ±1/±5), **C Regler**
 (Drehregler-Optik, hoch/runter ziehen, Wert groß oben beim Ziehen). Gemeinsam: Kanal und Name groß oben (antippen =
 Kanalwahl), „ungespeichert“ darunter, Verbindungspunkt klein in der Ecke, „Speichern“ und „Alles zurück“ unten,
@@ -580,6 +580,30 @@ des Kanalwechsels ist nicht gemessen, und der Fall „Regler drehen während des
 
 *Fertig, wenn:* eine Probe von 2 Stunden ohne Hänger läuft, eine Regleränderung sofort hörbar ist, ein Kanalwechsel
 wartende Werte verwirft und ein Kabelzug zum Einfrieren und Neu-Lesen ohne Schreiben führt.
+
+*Pull Requests (abgestimmt 16.11.2026):* drei statt einer Scheibe pro Schritt, weil 1b vor allem vorhandene
+Schichten verdrahtet. 1. **Modell und Adressprüfung:** Entwurf löschen, Regler von Booster, Delay und Reverb in
+die Liste, Schreibsperre für alles, was noch nicht am Amp bestätigt ist, Prüfwerkzeug; die Ergebnisse vom Amp
+kommen in denselben PR. 2. **Schreiben im Probe-Tab:** State (Schreibwege, Zurücksetzen mit „Rückgängig“, „Alles
+zurück“, „Zurückholen“, `PATCH_SELECT`, Mock), Probe-Tab mit „Mehr“, Kanalwahl. 3. **Effekte und Abschluss:**
+Effekte-Seite beschreibbar, Testplan `docs/testplan/phase-1b.md`, Version 0.3.0, danach Release.
+
+*Stand 1b:* PR 1 (16.11.2026): `design.html` und `src/ui/design/` gelöscht. Das Schema kennt jetzt Sichtbarkeit je
+Typ (`visibleFor`), einen Ziehschritt (`dragStep`, z. B. 5 ms für die Delay-Zeit) und `instanceParam()` (Parameter
+einer Variation mit Adresse ab Patch-Anfang, Schlüssel wie `delay.1.time`). In `src/model/params.ts` stehen die
+Regler von Booster (7), Delay (13, je Typ: Standard, PAN, MODULATE, SDE-3000) und Reverb (9, Spring Color nur bei
+SPRING; Layer Mode schreibgeschützt bis Phase 2), Lagen und Bereiche aus der lokalen BTS-Analyse. Jeder Wert in
+allen Mitschnitten liegt in diesen Bereichen. **Schreibsperre:** `writable()` lässt nur Parameter mit Status C zu,
+`setValue` schreibt nichts anderes. Was noch [D] ist, bleibt in der App gesperrt, bis es am Amp bestätigt ist.
+**Prüfwerkzeug:** `tools/katana-probe.ps1 -ParamTest [-Only <Regex>]` geht die Adressen der Liste im aktuellen
+Patch einzeln durch (lesen, Nachbarwert schreiben, zurücklesen, fragen „gehört oder gesehen?“, alten Wert
+zurückschreiben, prüfen), Variationsparameter in der aktiven Variation, und legt `param-test-*.json` neben den
+Mitschnitt. Vorher ein Komplett-Backup. **Ergebnis 16.11.2026** (erster Lauf, nach 16 von 51 Adressen bewusst
+beendet): alle 16 geschrieben, zurückgelesen, am Amp gesehen oder gehört und wieder zurückgestellt. Damit [C]:
+An/Aus und Farbe aller fünf Effekte, Amp-Typ, Amp-Variation, Endstufen-Variation, Resonance, NS an/aus und NS
+Release (`protocol-notes.md` 2.8). **Noch [D] und in der App gesperrt:** Contour (Auswahl, Freq Shift), die
+Effekttypen und die Regler von Booster, Delay und Reverb. Sie werden vor PR 2 bzw. PR 3 mit
+`-ParamTest -Only 'contour|type'` bzw. `-Only 'booster|delay|reverb'` nachgeholt.
 
 **1c – Speichern**
 - **Speichern** auf den aktuellen Kanal: mit Bestätigung, Quittung abwarten, zurücklesen, vergleichen.

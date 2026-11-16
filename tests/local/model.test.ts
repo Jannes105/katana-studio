@@ -9,11 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { ADDR, PANEL_INDEX, PREVIEW_INDEX, storedPatchAddress } from '../../src/protocol/address';
 import { parseHex, parseMessage } from '../../src/protocol/sysex';
 import { parseCapture } from '../../src/mock/capture';
-import { AMP_TYPE_NAMES, EFFECTS } from '../../src/model/params';
-import { PatchImage, patchView } from '../../src/model/patch';
+import { AMP_TYPE_NAMES, EFFECTS, VARIATION_PARAMS } from '../../src/model/params';
+import { PatchImage, patchView, readRaw } from '../../src/model/patch';
+import { isCaptureFile } from '../helpers/capture-checks';
 
 const DIR = join(__dirname, '..', '..', 'captures');
-const files = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith('.json')) : [];
+const files = existsSync(DIR) ? readdirSync(DIR).filter(isCaptureFile) : [];
 
 /** Every complete patch image in a capture (current patch and stored slots), labelled by its base. */
 function images(file: string): { label: string; image: PatchImage }[] {
@@ -72,6 +73,17 @@ describe.skipIf(files.length === 0)('parameter list against real captures (local
             EFFECTS.find((g) => g.key === e.key)?.typeNames.length ?? 0,
           );
         }
+      }
+    }
+  });
+
+  it('every knob of booster, delay and reverb lies in its range, in all three variations', () => {
+    for (const { file, label, image } of all) {
+      for (const def of VARIATION_PARAMS) {
+        const v = readRaw(image, def);
+        expect(v, `${file} ${label} ${def.key}`).toBeDefined();
+        expect(v, `${file} ${label} ${def.key}`).toBeGreaterThanOrEqual(def.min);
+        expect(v, `${file} ${label} ${def.key}`).toBeLessThanOrEqual(def.max);
       }
     }
   });

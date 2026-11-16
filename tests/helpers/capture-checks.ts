@@ -90,3 +90,11 @@ export async function expectQueueCompletes(capture: Capture): Promise<void> {
     expect(replay.mismatches).toEqual([]);
   }
 }
+
+/**
+ * A capture in captures/ (any .json there), but not the results file of `katana-probe.ps1 -ParamTest`
+ * (param-test-*.json), which lies next to the captures and is no capture.
+ */
+export function isCaptureFile(name: string): boolean {
+  return name.endsWith('.json') && !name.startsWith('param-test-');
+}

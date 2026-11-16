@@ -31,7 +31,7 @@ import { PATCH_NAME } from '../model/params';
 import { PatchImage, patchBlockAt, readText } from '../model/patch';
 import type { BackupFile, PatchFile } from '../storage/format';
 import { patchFileFrom, readBackup, type FileMeta } from './backup';
-import { encodingSize, type ParamDef } from '../model/schema';
+import { encodingSize, writable, type ParamDef } from '../model/schema';
 
 export const ECHO_GUARD_MS = 300;
 export const PATCH_CHANGE_QUIET_MS = 100;
@@ -307,13 +307,13 @@ export class AmpConnection {
 
   /**
    * Writes a parameter of the current patch (raw value, clamped to its range). Shown at once (rule 1). Refused
-   * while reading, read-only, disconnected, or for read-only parameters.
+   * while reading, read-only, disconnected, and for parameters that are not writable (read-only, or the
+   * address not yet confirmed on the amp). Parameters of a variation go through instanceParam().
    */
   async setValue(def: ParamDef, raw: number): Promise<void> {
     const queue = this.queue;
     const s = this.stateValue;
-    if (!queue || s.phase !== 'connected' || s.readOnly || s.reading || def.readonly) return;
-    if (def.encoding === 'ascii16') return; // names come later
+    if (!queue || s.phase !== 'connected' || s.readOnly || s.reading || !writable(def)) return;
     const v = Math.min(def.max, Math.max(def.min, Math.round(raw)));
     const data = def.encoding === 'u4x4' ? u4x4.encode(v) : u7.encode(v);
     const stamp = (): void => {

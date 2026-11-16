@@ -41,7 +41,27 @@ export interface ParamDef {
   readonly readonly?: boolean;
   /** Shown in the rehearsal view (PLAN 5, design round: the Probe tab). */
   readonly rehearsal?: boolean;
+  /**
+   * Parameters of a VariantGroup: shown only for these type values (raw). Missing = every type. The value stays
+   * in the patch either way; hiding is presentation only (PLAN 4.4: visibility rule).
+   */
+  readonly visibleFor?: readonly number[];
+  /** Raw steps per drag step of a knob (e.g. 5 for the delay time in ms); default 1. */
+  readonly dragStep?: number;
   readonly status: Status;
+}
+
+/**
+ * True if the app may write this parameter: never read-only ones (PLAN 4.4), and only addresses confirmed on
+ * the amp (status C). Until an address is checked by writing and reading back, it stays read-only in the app.
+ */
+export function writable(def: ParamDef): boolean {
+  return !def.readonly && def.status === 'C' && def.encoding !== 'ascii16';
+}
+
+/** True if a VariantGroup parameter is shown for the given type (raw). */
+export function visibleFor(def: ParamDef, type: number | undefined): boolean {
+  return def.visibleFor === undefined || (type !== undefined && def.visibleFor.includes(type));
 }
 
 /** Byte length of an encoding. */
@@ -76,7 +96,20 @@ export interface VariantGroup {
   readonly typeNames: readonly string[];
   /** Block offset of each variation's parameter block (the type block itself for booster, delay and reverb). */
   readonly paramBlocks: Instances;
-  /** Parameters relative to the parameter block; filled from Phase 1b on. */
+  /**
+   * Parameters relative to the parameter block (byte 0 is the type for booster, delay and reverb). Filled for
+   * booster, delay and reverb (Phase 1b); mod and FX follow in Phase 2. instanceParam() addresses them.
+   */
   readonly params: readonly ParamDef[];
   readonly status: Status;
+}
+
+/**
+ * A parameter of variation `colour` (0–2) as a patch parameter: offset from the patch base and a key with the
+ * variation (`delay.1.time`). This is the form setValue and readRaw take.
+ */
+export function instanceParam(g: VariantGroup, colour: number, def: ParamDef): ParamDef {
+  const base = g.paramBlocks[colour];
+  if (base === undefined) throw new RangeError(`Bad colour ${colour}`);
+  return { ...def, key: `${g.key}.${colour}.${def.key}`, at: base + def.at };
 }

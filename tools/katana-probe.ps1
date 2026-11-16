@@ -1,6 +1,6 @@
 # Read-only probe for the Katana Gen 3 on the Windows MIDI port "KATANA3".
-# Sends only the identity request and RQ1 (read) requests, except with -SelectTest, -EditorMode and
-# -WriteTest (see the parameters below).
+# Sends only the identity request and RQ1 (read) requests, except with -SelectTest, -EditorMode,
+# -WriteTest and -ParamTest (see the parameters below).
 # Usage:  powershell -File tools/katana-probe.ps1 [-IdleSeconds 60] [-OutDir captures]
 # BOSS Tone Studio and any browser tab using the port must be closed.
 param(
@@ -19,7 +19,14 @@ param(
   [int]$EditorMode = -1,
   # Writes: echo and send-pacing test on the NS threshold of the current patch only (never PATCH_WRITE).
   # The original value is restored at the end. Needs the BOSS Tone Studio backup.
-  [switch]$WriteTest
+  [switch]$WriteTest,
+  # Writes: checks the addresses of the parameter list one by one in the current patch (never PATCH_WRITE,
+  # never a stored slot). Per address: read, write a nearby value, read back, ask whether the change was
+  # heard or seen, write the original value back and read again. Variation parameters use the active
+  # variation. Results go to param-test-<time>.json next to the capture. Needs a complete backup first.
+  [switch]$ParamTest,
+  # With -ParamTest: only keys matching this regex, e.g. 'delay' or '^amp\.'.
+  [string]$Only = ''
 )
 $ErrorActionPreference = 'Stop'
 
@@ -408,6 +415,149 @@ try {
       $null = Ask (Dt1 $nsAddr (, [byte]$v0)) 'DT1 NS threshold restore (final)' 300 100
       "`nrestored NS threshold, read back: " + (ReadNs) + " (original $v0)"
     }
+    return
+  }
+
+  if ($ParamTest) {
+    "`n== Parameter test: current patch only (20 00 xx xx), every value is written back"
+    if ((Read-Host 'Complete backup made (app or BOSS Tone Studio)? [y/N]') -ne 'y') { 'Stopped: make a backup first.'; return }
+
+    # Our parameter list (src/model/params.ts), as plain rows. B1 B2 = block (patch base 20 B1 B2 00),
+    # Var = effect whose active variation picks the block (-1 = fixed block), Types = shown only for these types.
+    $fx = @(
+      @{ Name = 'booster'; Block = 0x0A; Switch = 0 }, @{ Name = 'mod'; Block = 0x10; Switch = 1 },
+      @{ Name = 'fx'; Block = 0x16; Switch = 2 }, @{ Name = 'delay'; Block = 0x28; Switch = 3 },
+      @{ Name = 'reverb'; Block = 0x34; Switch = 5 })
+    function P([string]$key, [int]$b2, [int]$byte, [int]$min, [int]$max, [string]$kind, $var = -1, [int]$size = 1, [int[]]$types = $null) {
+      [pscustomobject]@{ Key = $key; B2 = $b2; Byte = $byte; Min = $min; Max = $max; Kind = $kind; Var = $var; Size = $size; Types = $types }
+    }
+    $items = @(
+      # LEDs on the amp: switches and colours (reported by the amp, writing not yet checked)
+      foreach ($e in 0..4) { P "$($fx[$e].Name).on" 0x08 $fx[$e].Switch 0 1 'switch' }
+      foreach ($e in 0..4) { P "$($fx[$e].Name).colour" 0x04 $e 0 2 'select' }
+      P 'amp.type' 0x06 7 0 5 'select'
+      P 'amp.variation' 0x06 9 0 1 'switch'
+      P 'amp.powerampVariation' 0x06 6 0 1 'switch'
+      P 'amp.resonance' 0x06 8 0 100 'knob'
+      P 'ns.on' 0x58 0 0 1 'switch'
+      P 'ns.release' 0x58 2 0 100 'knob'
+      P 'contour.select' 0x40 0 0 3 'select'
+      P 'contour.freqShift' 0x42 1 0 100 'knob' 'contour'
+      foreach ($e in 0..4) { $max = (22, 30, 30, 7, 4)[$e]; P "$($fx[$e].Name).type" 0 0 0 $max 'select' $e }
+      P 'booster.drive' 0 1 0 120 'knob' 0
+      P 'booster.bottom' 0 2 0 100 'knob' 0
+      P 'booster.tone' 0 3 0 100 'knob' 0
+      P 'booster.solo' 0 4 0 1 'switch' 0
+      P 'booster.soloLevel' 0 5 0 100 'knob' 0
+      P 'booster.effectLevel' 0 6 0 100 'knob' 0
+      P 'booster.directMix' 0 7 0 100 'knob' 0
+      P 'delay.time' 0 1 1 2000 'knob' 3 4
+      P 'delay.feedback' 0 5 0 100 'knob' 3
+      P 'delay.highCut' 0 6 0 14 'select' 3 1 @(0, 1, 2, 3, 4, 5, 6)
+      P 'delay.effectLevel' 0 7 0 120 'knob' 3
+      P 'delay.directMix' 0 8 0 100 'knob' 3
+      P 'delay.tapTime' 0 9 0 100 'knob' 3 1 @(1)
+      P 'delay.modRate' 0 10 0 100 'knob' 3 1 @(6, 7)
+      P 'delay.modDepth' 0 11 0 100 'knob' 3 1 @(6, 7)
+      P 'delay.range' 0 12 0 1 'switch' 3 1 @(7)
+      P 'delay.filter' 0 13 0 1 'switch' 3 1 @(7)
+      P 'delay.feedbackPhase' 0 14 0 1 'switch' 3 1 @(7)
+      P 'delay.delayPhase' 0 15 0 1 'switch' 3 1 @(7)
+      P 'delay.modSwitch' 0 16 0 1 'switch' 3 1 @(7)
+      P 'reverb.time' 0 2 0 99 'knob' 4
+      P 'reverb.preDelay' 0 3 0 500 'knob' 4 4
+      P 'reverb.lowCut' 0 7 0 17 'select' 4
+      P 'reverb.highCut' 0 8 0 14 'select' 4
+      P 'reverb.density' 0 9 0 10 'knob' 4
+      P 'reverb.effectLevel' 0 10 0 100 'knob' 4
+      P 'reverb.directMix' 0 11 0 100 'knob' 4
+      P 'reverb.springColor' 0 12 0 100 'knob' 4 1 @(3)
+    )
+    if ($Only) { $items = @($items | Where-Object { $_.Key -match $Only }) }
+
+    function ReadAt([byte[]]$a, [int]$size) {
+      $x = Ask (Rq1 $a (0, 0, 0, $size)) ("RQ1 " + (Hex $a)) 400 60
+      $d = @($x.Dt1 | Where-Object { $_.Lin -eq (Lin $a) })
+      if (-not $d.Count -or $d[-1].Data.Length -lt $size) { return -1 }
+      $v = $d[-1].Data
+      if ($size -eq 4) { (($v[0] * 16 + $v[1]) * 16 + $v[2]) * 16 + $v[3] } else { [int]$v[0] }
+    }
+    function Enc([int]$v, [int]$size) {
+      if ($size -eq 4) { [byte[]](($v -shr 12) -band 15, ($v -shr 8) -band 15, ($v -shr 4) -band 15, $v -band 15) } else { [byte[]](, $v) }
+    }
+    function WriteAt([byte[]]$a, [int]$v, [int]$size, $label) { $null = Ask (Dt1 $a (Enc $v $size)) $label 150 40 }
+    function TestValue($it, [int]$v) {
+      switch ($it.Kind) {
+        'switch' { return 1 - $v }
+        'select' { if ($v -lt $it.Max) { return $v + 1 } else { return $v - 1 } }
+        default {
+          $step = [math]::Max(1, [math]::Round(($it.Max - $it.Min) / 10))
+          if ($v + $step -le $it.Max -and ($v -lt ($it.Min + $it.Max) / 2 -or $v - $step -lt $it.Min)) { return $v + $step } else { return $v - $step }
+        }
+      }
+    }
+
+    $results = @(); $n = 0; $quit = $false
+    foreach ($it in $items) {
+      $n++
+      $b2 = $it.B2; $note = ''
+      if ($it.Var -is [int] -and $it.Var -ge 0) {
+        $e = $fx[$it.Var]
+        $colour = ReadAt ([byte[]](0x20, 0, 0x04, $it.Var)) 1
+        $b2 = $e.Block + 2 * $colour
+        $on = ReadAt ([byte[]](0x20, 0, 0x08, $e.Switch)) 1
+        $type = ReadAt ([byte[]](0x20, 0, $b2, 0)) 1
+        if ($null -ne $it.Types -and $it.Types -notcontains $type) {
+          "[$n/$($items.Count)] $($it.Key): not shown for type $type of the active variation, skipped"
+          $results += [ordered]@{ key = $it.Key; result = 'skipped'; reason = "type $type" }
+          continue
+        }
+        $note = "variation $colour, type $type" + $(if ($on -eq 0) { ", $($e.Name) is OFF (switch it on at the amp to hear it)" } else { '' })
+      }
+      elseif ($it.Var -is [string] -and $it.Var -eq 'contour') {
+        $c = ReadAt ([byte[]](0x20, 0, 0x40, 0)) 1
+        if ($c -lt 1) { "[$n/$($items.Count)] $($it.Key): contour is off, skipped"; $results += [ordered]@{ key = $it.Key; result = 'skipped'; reason = 'contour off' }; continue }
+        $b2 = 0x40 + 2 * $c; $note = "contour $c"
+      }
+      $a = [byte[]](0x20, 0, $b2, $it.Byte)
+      $v0 = ReadAt $a $it.Size
+      if ($v0 -lt 0) { "[$n/$($items.Count)] $($it.Key) at $(Hex $a): no reply, skipped"; $results += [ordered]@{ key = $it.Key; address = (Hex $a); result = 'no reply' }; continue }
+      $v1 = TestValue $it $v0
+      "`n[$n/$($items.Count)] $($it.Key) at $(Hex $a): $v0 -> $v1  $note"
+      $answer = ''; $rb = -1
+      try {
+        while ($true) {
+          WriteAt $a $v1 $it.Size "DT1 $($it.Key) = $v1"
+          $rb = ReadAt $a $it.Size
+          "  read back: $rb $(if ($rb -eq $v1) { 'OK' } else { 'DIFFERENT' })"
+          $answer = Read-Host '  Heard or seen? [y] yes  [n] no  [r] again  [s] skip  [q] quit'
+          if ($answer -ne 'r') { break }
+          WriteAt $a $v0 $it.Size "DT1 $($it.Key) = $v0 (again)"
+          Start-Sleep -Milliseconds 700
+        }
+      }
+      finally {
+        WriteAt $a $v0 $it.Size "DT1 $($it.Key) restore $v0"
+      }
+      $back = ReadAt $a $it.Size
+      "  restored: $back $(if ($back -eq $v0) { 'OK' } else { "DIFFERENT (expected $v0)" })"
+      $results += [ordered]@{ key = $it.Key; address = (Hex $a); from = $v0; to = $v1; readBack = $rb; restored = $back; answer = $answer; note = $note }
+      Mark "param test $($it.Key): answer $answer"
+      if ($answer -eq 'q') { $quit = $true; break }
+    }
+
+    "`n== Summary"
+    foreach ($r in $results) {
+      if ($r.result) { "  {0,-24} {1}" -f $r.key, $r.result; continue }
+      $ok = ($r.readBack -eq $r.to) -and ($r.restored -eq $r.from)
+      "  {0,-24} {1}  {2,5} -> {3,5}  read back {4}  restored {5}  answer {6}" -f $r.key, $r.address, $r.from, $r.to, $(if ($r.readBack -eq $r.to) { 'OK' } else { $r.readBack }), $(if ($r.restored -eq $r.from) { 'OK' } else { $r.restored }), $(if ($r.answer) { $r.answer } else { '-' })
+      if (-not $ok) { "    ^ check this one" }
+    }
+    if ($quit) { "(stopped by q)" }
+    New-Item -ItemType Directory -Force $OutDir | Out-Null
+    $rf = Join-Path $OutDir ("param-test-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    [ordered]@{ tool = 'katana-probe.ps1 -ParamTest'; at = (Get-Date).ToString('o'); results = $results } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $rf
+    "Results saved: $rf"
     return
   }
 

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADDR, storedPatchAddress } from '../../src/protocol/address';
+import { ADDR, addr, storedPatchAddress } from '../../src/protocol/address';
 import { u2x4 } from '../../src/protocol/encoding';
 import { buildDt1, parseMessage } from '../../src/protocol/sysex';
 import { MockAmp } from '../../src/mock/mock-amp';
 import { MockDevice } from '../../src/mock/mock-device';
 import { AMP_GAIN, NS_THRESHOLD, EFFECTS, effectType } from '../../src/model/params';
 import { readRaw } from '../../src/model/patch';
+import { instanceParam, type ParamDef } from '../../src/model/schema';
 import { AmpConnection, slotName, type ConnectionState } from '../../src/state/connection';
 
 beforeEach(() => vi.useFakeTimers());
@@ -114,14 +115,36 @@ describe('AmpConnection: values, reports and "unsaved"', () => {
     expect(paramWrites(amp).length).toBe(before);
   });
 
-  it('clamps an effect type to its table of names', async () => {
+  it('clamps an effect type to its table of names (once confirmed)', async () => {
     const { amp, connection } = await started();
     const reverb = EFFECTS.find((g) => g.key === 'reverb');
     if (!reverb) throw new Error('no reverb');
-    const type = effectType(reverb, 0);
+    const type: ParamDef = { ...effectType(reverb, 0), status: 'C' };
     void connection.setValue(type, 99);
     await tick(20);
     expect(amp.peek(ADDR.currentPatch + type.at)).toEqual([reverb.typeNames.length - 1]);
+  });
+
+  it('never writes an address that is not confirmed on the amp (status D)', async () => {
+    const { amp, connection } = await started();
+    const before = paramWrites(amp).length;
+    void connection.setValue({ ...NS_THRESHOLD, status: 'D' }, 12);
+    await tick(20);
+    expect(paramWrites(amp).length).toBe(before);
+  });
+
+  it('writes a variation parameter at its instance address, a time as four nibbles', async () => {
+    const { amp, connection } = await started();
+    const delay = EFFECTS.find((g) => g.key === 'delay');
+    const def = delay?.params.find((p) => p.key === 'time');
+    if (!delay || !def) throw new Error('no delay time');
+    const time = { ...instanceParam(delay, 2, def), status: 'C' as const };
+    expect(time.key).toBe('delay.2.time');
+    void connection.setValue(time, 5000);
+    await tick(20);
+    // Delay variation 2 is block 2C 00; the time is bytes 1–4, clamped to 2000 ms = 0x7D0.
+    expect(amp.peek(ADDR.currentPatch + addr(0, 0, 0x2c, 0x01), 4)).toEqual([0, 7, 13, 0]);
+    expect(readRaw(connection.state.current, time)).toBe(2000);
   });
 
   it('follows a knob report from the amp, but not within 300 ms of an own write (rule 2)', async () => {
