@@ -88,8 +88,13 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           apk=android/app/build/outputs/apk/release/app-release.apk
-          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner
-          "$apksigner" verify --print-certs "$apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          # The exit code of apksigner is the check. Its output format differs between build-tools versions
+          # ("Signer #1 …" or "Signer (minSdkVersion=…) …"), so it is only shown, never parsed. Only the
+          # certificate digest goes into the public log, not the DN.
+          certs=$("$tools/apksigner" verify --print-certs "$apk")
+          echo "Signature verified with $(basename "$tools")/apksigner"
+          echo "$certs" | grep -E "certificate SHA-256 digest" || true
           out="katana-studio-$VERSION.apk"
           cp "$apk" "$out"
           echo "file=$out" >> "$GITHUB_OUTPUT"
