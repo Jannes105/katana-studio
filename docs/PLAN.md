@@ -269,7 +269,8 @@ organisiert:
 - **Umgesetzt (1a, Scheibe 1, 16.11.2026):** Schema in `src/model/schema.ts` (`ParamDef` mit Offset, Kodierung,
   Min/Max, Darstellung, Bedienelement, `readonly`, `rehearsal` und Status C/D; `VariantGroup` für die fünf Effekte
   mit drei Instanzen, Farbe und Schalter). Parameterliste für 1a in `src/model/params.ts`: Name, Amp mit Typ und
-  Variation, Resonance, Farben, Schalter, Typ jeder Variation, Noise Suppressor. Das Modell rechnet nur aus
+  Variation, Resonance, Farben, Schalter, Typ jeder Variation, Noise Suppressor (seit Scheibe 5 auch Contour,
+Endstufen-Variation und die Typnamen). Das Modell rechnet nur aus
   **Rohbytes pro Block** (`PatchImage` in `src/model/patch.ts`), jeder Block hat einen stabilen Schlüssel (Offset als
   drei Hex-Stellen, z. B. `000600`). Typ-Lagen sind aus den Speicherplätzen der Mitschnitte abgeleitet
   (`protocol-notes.md` 2.8, Status D). Effekttypen zeigen „Type n“ und bleiben schreibgeschützt, bis unsere eigene
@@ -531,8 +532,17 @@ LED, „Mehr“ mit Resonance), `Knob.svelte`, `Sheet.svelte`, Farben in `theme.
 Werte (gegen den gespeicherten Platz) sind orange mit Punkt an der gespeicherten Stellung. Hinter dem
 Verbindungspunkt: Status, Neu lesen, Neu verbinden, Log, Sprachwahl (Englisch/Deutsch, gemerkt), Hinweis
 „inoffiziell“ und im Browser die Mock-Aktionen (Kanal, Regler, Speichern am Amp, Kabel). Contour und
-Endstufen-Variation fehlen noch, weil ihre Adressen nicht bekannt sind; der Effekte-Tab ist bis Scheibe 5 ein
-Platzhalter. Der Entwurf (`design.html`, `src/ui/design/`) bleibt als Vorlage bis Ende 1a.
+Endstufen-Variation fehlen noch, weil ihre Adressen nicht bekannt sind. Der Entwurf (`design.html`,
+`src/ui/design/`) bleibt als Vorlage bis Ende 1a. Gemergt als #14.
+Scheibe 5 (16.11.2026): `src/ui/EffectsView.svelte`. Liste mit Booster, Mod, FX, Delay, Reverb und Noise
+Suppressor: LED in der Farbe der aktiven Variation, „Farbe · Typ“, Schalter an/aus (nur Anzeige), Punkt bei
+Abweichung vom gespeicherten Platz. Antippen öffnet die Effekt-Seite mit An/Aus und den drei Variationen samt Typ;
+die aktive ist hervorgehoben, geänderte Typen orange. Regler folgen mit 1b (Booster, Delay, Reverb) bzw. Phase 2
+(Mod, FX). Die Typnamen stehen seit 16.11.2026 in eigenen Tabellen in `src/model/params.ts` (Booster 23, Mod/FX 31,
+Delay 8, Reverb 5), damit sind die Effekttypen auch beschreibbar (für 1b). Dazu kamen Contour (Auswahl Aus/1/2/3,
+Freq Shift je Contour) und Endstufen-Variation in die Liste und ins Fenster „Mehr“. Quelle für Namen und Lagen ist
+eine lokale Analyse der BTS-Dateien (`tools/extract-bts.js` nach `bts-extract/`, beides nicht im Repo, von
+ESLint und Prettier ausgenommen); jeder Wert in den Mitschnitten liegt in diesen Bereichen.
 
 **1b – Live einstellen**
 - Kanäle A1–B4 wählen (Panel nur anzeigen).
@@ -750,8 +760,8 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
     Kotlin 2.2.20, JDK 21.
 23. **Schema der Parameterliste** (4.4) als Entwurf, zumindest für die Blöcke von Phase 1b (Amp, Booster, Delay,
     Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle. *Teilweise erledigt 16.11.2026:*
-    Schema und Liste für 1a stehen (4.4). Für 1b fehlen die Regler von Booster, Delay und Reverb und unsere
-    Typnamen-Tabellen.
+    Schema und Liste für 1a stehen (4.4), die Typnamen auch. Für 1b fehlen noch die Regler von Booster, Delay
+    und Reverb.
 
 ### 9.3 Bereit für die Implementierung, wenn
 

@@ -88,7 +88,7 @@ describe('patchView against the demo mock', () => {
       expect(e.on).toBe(demo.on[k] === 1);
       expect(e.colour).toBe(demo.colours[k]);
       expect(e.types).toHaveLength(3);
-      expect(e.typeNames[0]).toMatch(/^Type \d+$/);
+      for (const n of e.typeNames) expect(n).not.toMatch(/^Type /); // names from our tables
     });
   });
 });

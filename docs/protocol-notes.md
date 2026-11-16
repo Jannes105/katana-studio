@@ -134,25 +134,30 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `06 00` + 1 | amp volume | `u7` | same as gain |
 | `06 00` + 2 | amp bass | `u7` | [D] |
 | `06 00` + 0 … 4 | gain, volume, bass, middle, treble (knobs in panel order) | `u7` 0–100 | [C 2026-11-15] reported, Q3 |
-| `06 00` + 6 | unknown | `u7` | 0 in every stored slot |
-| `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | [D] from the stored slots: the values fit the patch names (a "Crunch" patch 3, a "Pushed" patch 2, a lead patch 4, clean patches 1) |
-| `06 00` + 8 | presumably resonance | `u7` | [D]; 50 in every stored slot |
+| `06 00` + 6 | power amp variation | `u7` 0/1 | [D] analysis (2026-11-16); 0 in every stored slot |
+| `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | [D] from the stored slots: the values fit the patch names (a "Crunch" patch 3, a "Pushed" patch 2, a lead patch 4, clean patches 1); same order by analysis (2026-11-16) |
+| `06 00` + 8 | resonance | `u7` 0–100 | [D] analysis; 50 in every stored slot |
 | `06 00` + 9 | amp variation | `u7` 0/1 | [D]; 0 or 1 in the stored slots |
 | `0A 00`, `0C 00`, `0E 00` | booster, one block per variation (colour 0, 1, 2); byte 0 = type | 8 bytes each | [D]; the booster knob moves `0A 01` and `0A 06` (Q3) |
-| `10 00`, `12 00`, `14 00` | mod type per variation | 1 byte each | [D] |
-| `16 00`, `18 00`, `1A 00` | FX type per variation | 1 byte each | [D] |
+| `10 00`, `12 00`, `14 00` | mod type per variation, 0–30 (same type list as FX) | 1 byte each | [D] |
+| `16 00`, `18 00`, `1A 00` | FX type per variation, 0–30 | 1 byte each | [D] |
 | `1C 00`, `1E 00`, `20 00` | mod parameters of all types, per variation | 225 bytes each | [D]; the mod knob moves `1D 37` and `1D 3B` (Q3) |
 | `22 00`, `24 00`, `26 00` | FX parameters of all types, per variation | 225 bytes each | [D]; the FX knob moves `23 19`. The knob reports were taken with colour 0 for mod; for FX `23 19` lies in the first FX block `22 00` |
 | `28 00`, `2A 00`, `2C 00` | delay per variation; byte 0 = type, bytes 1–4 = time | 17 bytes each; time `u4x4` in ms | [D]; `00 01 09 00` = 400 ms in most slots; the delay knob moves `28 05` and `28 07` |
-| `2E 00`, `30 00`, `32 00` | presumably Delay 2 per variation (same layout as delay) | 17 bytes each | [D] |
-| `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [D]; the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on |
+| `2E 00`, `30 00`, `32 00` | Delay 2 per variation (same layout as delay) | 17 bytes each | [D] analysis |
+| `40 00` + 0 | contour select: 0 off, 1–3 | `u7` 0–3 | [D] analysis; 0, 1 or 3 in the stored slots |
+| `42 00`, `44 00`, `46 00` | contour 1–3: byte 0 type (0–3), byte 1 freq shift (raw = shown + 50, −50…+50) | 2 bytes each | [D] analysis |
+| `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [D]; the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on; layer mode confirmed by analysis |
 | `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3 |
-| `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 presumably Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; +4 [D] |
+| `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; +4 [D] analysis |
 | `06 00` + 5 | presence (sixth amp knob) | `u7` | [C 2026-11-15] reported, Q3 |
 | `58 00` + 0 | noise suppressor switch | `u7` 0/1 | [D] |
 | `58 00` + 1 | noise suppressor threshold | `u7` 0–100 | **[C 2026-11-14]** written by DT1, change was audible |
 | `58 00` + 2 | noise suppressor release | `u7` 0–100 (range assumed) | [D] |
 | `5A 00` | send/return | | [D] |
+
+Type ranges (by analysis, 2026-11-16, consistent with every stored slot in the captures): booster 0–22, mod and FX
+0–30 (one list), delay 0–7, reverb 0–4, amp type 0–5. The names are in our own tables in `src/model/params.ts`.
 | `5C 00` ff. | assigns | | [D] |
 
 ### 2.9 Editor handshake and commands

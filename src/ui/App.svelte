@@ -8,6 +8,7 @@
   import { AMP_KNOBS } from '../model/params';
   import Header from './Header.svelte';
   import LogView from './LogView.svelte';
+  import EffectsView from './EffectsView.svelte';
   import ProbeView from './ProbeView.svelte';
   import Sheet from './Sheet.svelte';
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
@@ -125,7 +126,7 @@
     {:else if page === 'probe'}
       <ProbeView {s} {lang} />
     {:else if page === 'fx'}
-      <p class="later">{t(lang, 'fx.later')}</p>
+      <EffectsView {s} {lang} />
     {:else}
       <div class="log"><LogView {app} {lang} /></div>
     {/if}
@@ -297,11 +298,6 @@
   .wide {
     width: 100%;
     margin-top: 10px;
-  }
-  .later {
-    color: var(--muted);
-    text-align: center;
-    padding: 48px 24px;
   }
   .log {
     padding: 0 12px;

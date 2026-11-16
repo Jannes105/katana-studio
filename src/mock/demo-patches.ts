@@ -6,6 +6,9 @@ import { patchName } from '../protocol/encoding';
 import type { Address } from '../protocol/address';
 import {
   AMP_KNOBS,
+  AMP_POWERAMP_VARIATION,
+  CONTOUR_SELECT,
+  contourFreqShift,
   AMP_RESONANCE,
   AMP_TYPE,
   AMP_VARIATION,
@@ -144,6 +147,11 @@ export function writeDemoPatch(
   poke(base + AMP_TYPE.at, [p.ampType]);
   poke(base + AMP_RESONANCE.at, [50]);
   poke(base + AMP_VARIATION.at, [p.variation]);
+  // Some variety: contour and power amp variation on every second channel.
+  const odd = p.name.length % 2 === 1;
+  poke(base + AMP_POWERAMP_VARIATION.at, [odd ? 1 : 0]);
+  poke(base + CONTOUR_SELECT.at, [odd ? 2 : 0]);
+  poke(base + contourFreqShift(2).at, [odd ? 62 : 50]);
   EFFECTS.forEach((g, k) => {
     poke(base + g.switch.at, [p.on[k] ?? 0]);
     poke(base + g.colour.at, [p.colours[k] ?? 0]);
