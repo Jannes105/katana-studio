@@ -138,16 +138,16 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard (1 Clean → 2 Pushed); order also fits the stored slots and the analysis |
 | `06 00` + 8 | resonance | `u7` 0–100 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
 | `06 00` + 9 | amp variation | `u7` 0/1 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
-| `0A 00`, `0C 00`, `0E 00` | booster, one block per variation (colour 0, 1, 2); byte 0 = type | 8 bytes each | [D]; the booster knob moves `0A 01` and `0A 06` (Q3) |
-| `10 00`, `12 00`, `14 00` | mod type per variation, 0–30 (same type list as FX) | 1 byte each | [D] |
-| `16 00`, `18 00`, `1A 00` | FX type per variation, 0–30 | 1 byte each | [D] |
+| `0A 00`, `0C 00`, `0E 00` | booster, one block per variation (colour 0, 1, 2); byte 0 = type | 8 bytes each | [C 2026-11-16, variation 0] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to; the booster knob moves `0A 01` and `0A 06` (Q3) |
+| `10 00`, `12 00`, `14 00` | mod type per variation, 0–30 (same type list as FX) | 1 byte each | type byte [C 2026-11-16, variation 0] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to |
+| `16 00`, `18 00`, `1A 00` | FX type per variation, 0–30 | 1 byte each | type byte [C 2026-11-16, variation 0] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to |
 | `1C 00`, `1E 00`, `20 00` | mod parameters of all types, per variation | 225 bytes each | [D]; the mod knob moves `1D 37` and `1D 3B` (Q3) |
 | `22 00`, `24 00`, `26 00` | FX parameters of all types, per variation | 225 bytes each | [D]; the FX knob moves `23 19`. The knob reports were taken with colour 0 for mod; for FX `23 19` lies in the first FX block `22 00` |
-| `28 00`, `2A 00`, `2C 00` | delay per variation; byte 0 = type, bytes 1–4 = time | 17 bytes each; time `u4x4` in ms | [D]; `00 01 09 00` = 400 ms in most slots; the delay knob moves `28 05` and `28 07` |
+| `28 00`, `2A 00`, `2C 00` | delay per variation; byte 0 = type, bytes 1–4 = time | 17 bytes each; time `u4x4` in ms | [C 2026-11-16, variation 0] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to; `00 01 09 00` = 400 ms in most slots; the delay knob moves `28 05` and `28 07` |
 | `2E 00`, `30 00`, `32 00` | Delay 2 per variation (same layout as delay) | 17 bytes each | [D] analysis |
-| `40 00` + 0 | contour select: 0 off, 1–3 | `u7` 0–3 | [D] analysis; 0, 1 or 3 in the stored slots |
-| `42 00`, `44 00`, `46 00` | contour 1–3: byte 0 type (0–3), byte 1 freq shift (raw = shown + 50, −50…+50) | 2 bytes each | [D] analysis |
-| `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [D]; the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on; layer mode confirmed by analysis |
+| `40 00` + 0 | contour select: 0 off, 1–3 | `u7` 0–3 | [C 2026-11-16] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to; 0, 1 or 3 in the stored slots |
+| `42 00`, `44 00`, `46 00` | contour 1–3: byte 0 type (0–3), byte 1 freq shift (raw = shown + 50, −50…+50) | 2 bytes each | freq shift of contour 3 [C 2026-11-16] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to; type byte [D] |
+| `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [C 2026-11-16, variation 0] written unattended (`-ParamTest -NoAsk`): read back, no other byte of the patch changed; meaning from the layout, not listened to (layer mode not written); the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on; layer mode confirmed by analysis |
 | `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3; [C 2026-11-16] written for all five (`-ParamTest`), LED followed |
 | `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; [C 2026-11-16] written for all five (`-ParamTest`), LED followed; +4 [D] analysis |
 | `06 00` + 5 | presence (sixth amp knob) | `u7` | [C 2026-11-15] reported, Q3 |
@@ -162,7 +162,7 @@ Type ranges (by analysis, 2026-11-16, consistent with every stored slot in the c
 
 **Inside a variation block** (booster, delay, reverb; offsets from the block of the active variation, byte 0 =
 type). From local analysis of BOSS Tone Studio (2026-11-16): layout and ranges from its address map, which knob
-shows for which type from its effect pages. Every value in every capture lies in these ranges. All [D].
+shows for which type from its effect pages. Every value in every capture lies in these ranges. **[C 2026-11-16]** for variation 0 of each effect except reverb layer mode ([D]): written unattended, read back, no other byte of the patch changed, the whole patch as before after restoring. The bytes of other types were written too (`-AllTypes`), since they exist whatever the type. Nobody listened; that a byte means what its name says rests on the layout of BOSS Tone Studio and on the knob reports of Q3 (`0A 01`, `0A 06`, `28 05`, `28 07`, `34 0A` match drive, effect level, feedback, effect level, effect level).
 Ranges are raw values; "shown" is raw minus the offset.
 
 | Block | Byte | Parameter | Raw range | Shown / notes |

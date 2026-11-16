@@ -26,7 +26,13 @@ param(
   # variation. Results go to param-test-<time>.json next to the capture. Needs a complete backup first.
   [switch]$ParamTest,
   # With -ParamTest: only keys matching this regex, e.g. 'delay' or '^amp\.'.
-  [string]$Only = ''
+  [string]$Only = '',
+  # With -ParamTest: no questions (for an unattended run; also skips the backup question, so make the backup
+  # before). Instead of asking, checks that each write changes no other byte of the patch and that the whole
+  # patch is as before after restoring.
+  [switch]$NoAsk,
+  # With -ParamTest: also test knobs of other effect types (their bytes exist in the block whatever the type).
+  [switch]$AllTypes
 )
 $ErrorActionPreference = 'Stop'
 
@@ -420,7 +426,7 @@ try {
 
   if ($ParamTest) {
     "`n== Parameter test: current patch only (20 00 xx xx), every value is written back"
-    if ((Read-Host 'Complete backup made (app or BOSS Tone Studio)? [y/N]') -ne 'y') { 'Stopped: make a backup first.'; return }
+    if (-not $NoAsk -and (Read-Host 'Complete backup made (app or BOSS Tone Studio)? [y/N]') -ne 'y') { 'Stopped: make a backup first.'; return }
 
     # Our parameter list (src/model/params.ts), as plain rows. B1 B2 = block (patch base 20 B1 B2 00),
     # Var = effect whose active variation picks the block (-1 = fixed block), Types = shown only for these types.
@@ -483,9 +489,26 @@ try {
       if ($size -eq 4) { (($v[0] * 16 + $v[1]) * 16 + $v[2]) * 16 + $v[3] } else { [int]$v[0] }
     }
     function Enc([int]$v, [int]$size) {
-      if ($size -eq 4) { [byte[]](($v -shr 12) -band 15, ($v -shr 8) -band 15, ($v -shr 4) -band 15, $v -band 15) } else { [byte[]](, $v) }
+      if ($size -eq 4) { [byte[]]((($v -shr 12) -band 15), (($v -shr 8) -band 15), (($v -shr 4) -band 15), ($v -band 15)) } else { [byte[]](, $v) }
     }
     function WriteAt([byte[]]$a, [int]$v, [int]$size, $label) { $null = Ask (Dt1 $a (Enc $v $size)) $label 150 40 }
+    # The whole current patch, one entry per byte (linear address -> value).
+    function PatchMap {
+      $map = @{}
+      foreach ($d in (Ask (Rq1 (0x20, 0, 0, 0) (0, 2, 0, 0)) 'RQ1 current patch' 1500 300).Dt1) {
+        for ($i = 0; $i -lt $d.Data.Length; $i++) { $map[[int]($d.Lin + $i)] = [int]$d.Data[$i] }
+      }
+      $map
+    }
+    function LinHex([int]$n) { Hex @([int]([math]::Floor($n / 2097152) % 128), [int]([math]::Floor($n / 16384) % 128), [int]([math]::Floor($n / 128) % 128), [int]($n % 128)) }
+    # Bytes that differ between two patch maps, except those in $skip (linear addresses).
+    function MapDiff($x, $y, $skip) {
+      foreach ($k in ($y.Keys | Sort-Object)) {
+        if ($skip -contains $k) { continue }
+        if ($x[$k] -ne $y[$k]) { "{0}: {1} -> {2}" -f (LinHex $k), $x[$k], $y[$k] }
+      }
+      if ($x.Count -ne $y.Count) { "patch read incomplete ($($x.Count) / $($y.Count) bytes)" }
+    }
     function TestValue($it, [int]$v) {
       switch ($it.Kind) {
         'switch' { return 1 - $v }
@@ -507,7 +530,7 @@ try {
         $b2 = $e.Block + 2 * $colour
         $on = ReadAt ([byte[]](0x20, 0, 0x08, $e.Switch)) 1
         $type = ReadAt ([byte[]](0x20, 0, $b2, 0)) 1
-        if ($null -ne $it.Types -and $it.Types -notcontains $type) {
+        if (-not $AllTypes -and $null -ne $it.Types -and $it.Types -notcontains $type) {
           "[$n/$($items.Count)] $($it.Key): not shown for type $type of the active variation, skipped"
           $results += [ordered]@{ key = $it.Key; result = 'skipped'; reason = "type $type" }
           continue
@@ -524,12 +547,21 @@ try {
       if ($v0 -lt 0) { "[$n/$($items.Count)] $($it.Key) at $(Hex $a): no reply, skipped"; $results += [ordered]@{ key = $it.Key; address = (Hex $a); result = 'no reply' }; continue }
       $v1 = TestValue $it $v0
       "`n[$n/$($items.Count)] $($it.Key) at $(Hex $a): $v0 -> $v1  $note"
-      $answer = ''; $rb = -1
+      $answer = ''; $rb = -1; $side = @(); $before = $null
+      if ($NoAsk) { $before = PatchMap }
       try {
         while ($true) {
           WriteAt $a $v1 $it.Size "DT1 $($it.Key) = $v1"
           $rb = ReadAt $a $it.Size
           "  read back: $rb $(if ($rb -eq $v1) { 'OK' } else { 'DIFFERENT' })"
+          if ($NoAsk) {
+            # Nobody listens: check instead that the write changed no other byte of the patch.
+            $own = @(0..($it.Size - 1) | ForEach-Object { (Lin $a) + $_ })
+            $after = PatchMap
+            $side = @(MapDiff $before $after $own)
+            "  other bytes changed: $(if ($side.Count) { $side -join ', ' } else { 'none' })"
+            break
+          }
           $answer = Read-Host '  Heard or seen? [y] yes  [n] no  [r] again  [s] skip  [q] quit'
           if ($answer -ne 'r') { break }
           WriteAt $a $v0 $it.Size "DT1 $($it.Key) = $v0 (again)"
@@ -541,7 +573,13 @@ try {
       }
       $back = ReadAt $a $it.Size
       "  restored: $back $(if ($back -eq $v0) { 'OK' } else { "DIFFERENT (expected $v0)" })"
-      $results += [ordered]@{ key = $it.Key; address = (Hex $a); from = $v0; to = $v1; readBack = $rb; restored = $back; answer = $answer; note = $note }
+      $patchRestored = $null
+      if ($NoAsk) {
+        $left = @(MapDiff $before (PatchMap) @())
+        $patchRestored = ($left.Count -eq 0)
+        "  whole patch as before: $(if ($patchRestored) { 'yes' } else { 'NO: ' + ($left -join ', ') })"
+      }
+      $results += [ordered]@{ key = $it.Key; address = (Hex $a); from = $v0; to = $v1; readBack = $rb; restored = $back; answer = $answer; sideEffects = $side; patchRestored = $patchRestored; note = $note }
       Mark "param test $($it.Key): answer $answer"
       if ($answer -eq 'q') { $quit = $true; break }
     }
@@ -549,7 +587,7 @@ try {
     "`n== Summary"
     foreach ($r in $results) {
       if ($r.result) { "  {0,-24} {1}" -f $r.key, $r.result; continue }
-      $ok = ($r.readBack -eq $r.to) -and ($r.restored -eq $r.from)
+      $ok = ($r.readBack -eq $r.to) -and ($r.restored -eq $r.from) -and (-not $r.sideEffects.Count) -and ($r.patchRestored -ne $false)
       "  {0,-24} {1}  {2,5} -> {3,5}  read back {4}  restored {5}  answer {6}" -f $r.key, $r.address, $r.from, $r.to, $(if ($r.readBack -eq $r.to) { 'OK' } else { $r.readBack }), $(if ($r.restored -eq $r.from) { 'OK' } else { $r.restored }), $(if ($r.answer) { $r.answer } else { '-' })
       if (-not $ok) { "    ^ check this one" }
     }

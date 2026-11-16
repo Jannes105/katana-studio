@@ -24,6 +24,17 @@ const en = {
   'header.unsaved': 'Unsaved',
   'header.noPatch': 'No patch',
   'header.status': 'Connection',
+  'header.channels': 'Choose channel',
+
+  'channels.title': 'Channel',
+  'channels.note':
+    'Switches at once, like on the amp. Unsaved changes of this channel are remembered and can be restored when you come back.',
+  'channels.panel': 'Panel: only shown, choose it on the amp.',
+
+  'undo.reset': '{name} back to saved',
+  'undo.revertAll': 'All back to saved',
+  'undo.restore': 'Remembered changes restored',
+  'undo.skipped': '{count} not adjustable in the app yet, left as they are',
 
   'probe.amp': 'Amp',
   'probe.ampType': 'Amp type',
@@ -33,7 +44,7 @@ const en = {
   'probe.contourOff': 'Off',
   'probe.freqShiftOff': 'Freq Shift: contour off',
   'probe.powerAmp': 'Power amp variation',
-  'probe.readOnlyHint': 'This version only shows values; adjusting comes with the next version.',
+  'probe.hint': 'Drag a knob up or down. Double tap: back to the saved value.',
 
   'fx.title': 'Effects',
   'fx.note':
@@ -60,7 +71,7 @@ const en = {
   'fact.model': 'Model',
   'fact.writing': 'Writing',
   'fact.writingLocked': 'locked (read-only)',
-  'fact.writingOff': 'not in this version',
+  'fact.writingOn': 'on (current patch; saving comes later)',
   'fact.app': 'App',
   'fact.language': 'Language',
   'backup.title': 'Backup',
@@ -84,6 +95,9 @@ const en = {
   'action.reconnect': 'Connect again',
   'action.discard': 'Discard',
   'action.openLog': 'Open log',
+  'action.revertAll': 'Revert all to saved',
+  'action.restore': 'Restore',
+  'action.undo': 'Undo',
 
   'tab.probe': 'Rehearsal',
   'tab.fx': 'Effects',
@@ -131,6 +145,17 @@ const de: Record<TextKey, string> = {
   'header.unsaved': 'Ungespeichert',
   'header.noPatch': 'Kein Patch',
   'header.status': 'Verbindung',
+  'header.channels': 'Kanal wählen',
+
+  'channels.title': 'Kanal',
+  'channels.note':
+    'Wechselt sofort, wie am Amp. Ungespeicherte Änderungen dieses Kanals merkt sich die App; beim Zurückkommen lassen sie sich zurückholen.',
+  'channels.panel': 'Panel: nur Anzeige, am Amp wählen.',
+
+  'undo.reset': '{name} zurück auf gespeichert',
+  'undo.revertAll': 'Alles zurück auf gespeichert',
+  'undo.restore': 'Gemerkte Änderungen zurückgeholt',
+  'undo.skipped': '{count} in der App noch nicht einstellbar, bleiben wie sie sind',
 
   'probe.amp': 'Amp',
   'probe.ampType': 'Amp-Typ',
@@ -140,7 +165,7 @@ const de: Record<TextKey, string> = {
   'probe.contourOff': 'Aus',
   'probe.freqShiftOff': 'Freq Shift: Contour aus',
   'probe.powerAmp': 'Endstufen-Variation',
-  'probe.readOnlyHint': 'Diese Version zeigt die Werte nur an; Einstellen kommt mit der nächsten Version.',
+  'probe.hint': 'Regler hoch oder runter ziehen. Doppeltipp: zurück auf den gespeicherten Wert.',
 
   'fx.title': 'Effekte',
   'fx.note':
@@ -167,7 +192,7 @@ const de: Record<TextKey, string> = {
   'fact.model': 'Modell',
   'fact.writing': 'Schreiben',
   'fact.writingLocked': 'gesperrt (nur lesend)',
-  'fact.writingOff': 'nicht in dieser Version',
+  'fact.writingOn': 'an (aktueller Patch; Speichern kommt später)',
   'fact.app': 'App',
   'fact.language': 'Sprache',
   'backup.title': 'Backup',
@@ -191,6 +216,9 @@ const de: Record<TextKey, string> = {
   'action.reconnect': 'Neu verbinden',
   'action.discard': 'Verwerfen',
   'action.openLog': 'Log öffnen',
+  'action.revertAll': 'Alles zurück auf gespeichert',
+  'action.restore': 'Zurückholen',
+  'action.undo': 'Rückgängig',
 
   'tab.probe': 'Probe',
   'tab.fx': 'Effekte',

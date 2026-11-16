@@ -2,7 +2,7 @@
 
 import { EFFECTS, effectType } from '../model/params';
 import { effectView, readRaw, type EffectView } from '../model/patch';
-import type { ParamDef, VariantGroup } from '../model/schema';
+import { writable, type ParamDef, type VariantGroup } from '../model/schema';
 import type { ByteChange, ConnectionState } from '../state/connection';
 
 export type Dot = 'ok' | 'warn' | 'error' | 'off' | 'busy';
@@ -70,6 +70,16 @@ export function effectRows(s: ConnectionState): EffectRow[] {
 /** Remembered unsaved changes of the channel now shown (PLAN 2). */
 export function rememberedHere(s: ConnectionState): readonly ByteChange[] {
   return s.patchIndex === null ? [] : (s.remembered.get(s.patchIndex) ?? []);
+}
+
+/** Controls can change the amp right now (mirrors AmpConnection.canWrite, from the state alone). */
+export function canEdit(s: ConnectionState): boolean {
+  return s.phase === 'connected' && !s.readOnly && !s.reading && !s.backingUp && s.current.complete;
+}
+
+/** A control for this parameter is live: editing allowed and the parameter writable (PLAN 4.4). */
+export function editable(s: ConnectionState, def: ParamDef): boolean {
+  return canEdit(s) && writable(def);
 }
 
 /** Values can be looked at but are frozen or about to change: shown dimmed. */

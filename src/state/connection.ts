@@ -11,6 +11,8 @@
 //  5. read again when the app returns to the foreground (onForeground) and after every reconnect
 //  6. "unsaved" = difference to the stored slot of the channel, read in the background after each patch read
 //     and after every save
+//  7. back to the stored state: per parameter (revertParam), all (revertAll), each with undo; remembered
+//     changes of a channel are written back only on request (restoreRemembered)
 //  8. after a restart or reconnect the app greets and reads, it never writes on its own
 //  9. a pulled cable is a normal state: values freeze, the app reconnects when the amp comes back
 
@@ -27,7 +29,7 @@ import { u2x4, u4x4, u7 } from '../protocol/encoding';
 import { greet, modelName, type GreetingWarning } from '../protocol/greeting';
 import { SendQueue, type Diagnostic } from '../protocol/queue';
 import { hex, type ParsedMessage } from '../protocol/sysex';
-import { PATCH_NAME } from '../model/params';
+import { PATCH_NAME, PATCH_PARAMS, VARIATION_PARAMS } from '../model/params';
 import { PatchImage, patchBlockAt, readText } from '../model/patch';
 import type { BackupFile, PatchFile } from '../storage/format';
 import { patchFileFrom, readBackup, type FileMeta } from './backup';
@@ -38,12 +40,39 @@ export const PATCH_CHANGE_QUIET_MS = 100;
 export const PATCH_CHANGE_MAX_WAIT_MS = 300;
 export const LOG_LIMIT = 1000;
 
+/** Channels the app may select (PLAN 5, 1b: A1–B4; the Panel is only shown). */
+export const SELECTABLE_CHANNELS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+
 export type Phase = 'starting' | 'waiting' | 'connecting' | 'connected' | 'error';
 
 /** One changed byte of a patch: offset from the patch base and its value. */
 export interface ByteChange {
   readonly offset: Address;
   readonly value: number;
+}
+
+/**
+ * Result of writing several bytes (reset, revert all, restore, undo). `previous` holds the values before the
+ * write, so passing the result to undo() writes them back.
+ */
+export interface WriteResult {
+  readonly previous: readonly ByteChange[];
+  /** Changed bytes that were left alone because no writable parameter covers them (PLAN 4.4). */
+  readonly skipped: number;
+  /** Patch change counter at the time of the write; undo() refuses after a patch change. */
+  readonly generation: number;
+}
+
+/** Every writable parameter by each of its byte offsets (PLAN 4.4: only addresses from our list are written). */
+const WRITABLE_AT: ReadonlyMap<Address, ParamDef> = new Map(
+  [...PATCH_PARAMS, ...VARIATION_PARAMS]
+    .filter(writable)
+    .flatMap((p) => Array.from({ length: encodingSize(p.encoding) }, (_, i) => [p.at + i, p] as const)),
+);
+
+/** The writable parameter that covers a patch offset, if any. */
+export function writableParamAt(offset: Address): ParamDef | undefined {
+  return WRITABLE_AT.get(offset);
 }
 
 export interface ConnectionState {
@@ -164,6 +193,8 @@ export class AmpConnection {
   private readGeneration = 0;
   private storedGeneration = 0;
   private ownPatchNumberReads = 0;
+  /** Counts patch changes; an undo from before a change is refused. */
+  private patchGeneration = 0;
   private currentCollector: PatchCollector | undefined;
   private storedCollector: PatchCollector | undefined;
 
@@ -311,22 +342,115 @@ export class AmpConnection {
    * address not yet confirmed on the amp). Parameters of a variation go through instanceParam().
    */
   async setValue(def: ParamDef, raw: number): Promise<void> {
-    const queue = this.queue;
-    const s = this.stateValue;
-    if (!queue || s.phase !== 'connected' || s.readOnly || s.reading || !writable(def)) return;
+    if (!this.canWrite() || !writable(def)) return;
     const v = Math.min(def.max, Math.max(def.min, Math.round(raw)));
     const data = def.encoding === 'u4x4' ? u4x4.encode(v) : u7.encode(v);
-    const stamp = (): void => {
-      for (let i = 0; i < encodingSize(def.encoding); i++) this.lastLocalWrite.set(def.at + i, this.now());
-    };
-    stamp();
-    this.update({ current: s.current.with(def.at, data) });
-    this.updateUnsaved();
+    await this.writeRuns([{ offset: def.at, data }]);
+  }
+
+  /** True while writes are allowed: connected, not read-only, not reading, no backup running. */
+  canWrite(): boolean {
+    const s = this.stateValue;
+    return (
+      this.queue !== undefined &&
+      s.phase === 'connected' &&
+      !s.readOnly &&
+      !s.reading &&
+      !s.backingUp &&
+      s.current.complete
+    );
+  }
+
+  /**
+   * Writes single bytes of the current patch (reset, revert all, restore, undo). Each byte goes out with its
+   * whole parameter, one DT1 per parameter (same address and length as a knob write, so the queue's
+   * coalescing stays consistent). Bytes no writable parameter covers are skipped and counted. Returns null
+   * when writing is not allowed right now.
+   */
+  async writeBytes(changes: readonly ByteChange[]): Promise<WriteResult | null> {
+    if (!this.canWrite()) return null;
+    const s = this.stateValue;
+    const generation = this.patchGeneration;
+    const target = new Map<Address, number>();
+    let skipped = 0;
+    for (const c of changes) {
+      if (!writableParamAt(c.offset) || !Number.isInteger(c.value) || c.value < 0 || c.value > 0x7f)
+        skipped++;
+      else target.set(c.offset, c.value);
+    }
+    const previous: ByteChange[] = [];
+    const runs = new Map<Address, number[]>();
+    for (const [offset, value] of [...target].sort((a, b) => a[0] - b[0])) {
+      const old = s.current.read(offset, 1)?.[0];
+      if (old === undefined || old === value) continue;
+      previous.push({ offset, value: old });
+      const def = writableParamAt(offset);
+      if (!def) continue;
+      const run = runs.get(def.at) ?? [...(s.current.read(def.at, encodingSize(def.encoding)) ?? [])];
+      run[offset - def.at] = value;
+      runs.set(def.at, run);
+    }
+    await this.writeRuns([...runs].map(([offset, data]) => ({ offset, data })));
+    return { previous, skipped, generation };
+  }
+
+  /** Double tap on a knob (rule 7): the parameter goes back to the stored value of the channel. */
+  async revertParam(def: ParamDef): Promise<WriteResult | null> {
+    const s = this.stateValue;
+    if (!s.unsavedKnown) return null;
+    const stored = s.stored.read(def.at, encodingSize(def.encoding));
+    if (!stored) return null;
+    return this.writeBytes(stored.map((value, i) => ({ offset: def.at + i, value })));
+  }
+
+  /** "Revert all" (rule 7): every byte that differs from the stored slot goes back to the stored value. */
+  async revertAll(): Promise<WriteResult | null> {
+    const s = this.stateValue;
+    if (!s.unsavedKnown) return null;
+    return this.writeBytes(
+      s.unsaved.map((offset) => ({ offset, value: s.stored.read(offset, 1)?.[0] ?? -1 })),
+    );
+  }
+
+  /**
+   * "Restore" (PLAN 2, rule 7): writes the remembered changes of the current channel into the current patch,
+   * only on request, then forgets them.
+   */
+  async restoreRemembered(): Promise<WriteResult | null> {
+    const index = this.stateValue.patchIndex;
+    const changes = index === null ? undefined : this.stateValue.remembered.get(index);
+    if (index === null || !changes) return null;
+    const result = await this.writeBytes(changes);
+    if (result) {
+      this.discardRemembered(index);
+      this.addLog('info', `Restored ${result.previous.length} remembered bytes of ${slotName(index)}`);
+    }
+    return result;
+  }
+
+  /** Undo of a reset, revert or restore: writes the previous values back, unless the patch changed since. */
+  async undo(result: WriteResult): Promise<WriteResult | null> {
+    if (result.generation !== this.patchGeneration || this.patchChangePending()) return null;
+    return this.writeBytes(result.previous);
+  }
+
+  /**
+   * Selects a channel A1–B4 by PATCH_SELECT (PLAN 2: no question; the unsaved changes of the channel that is
+   * left are remembered by the patch-change report that follows). Not the Panel, not the active channel
+   * (selecting it again would reload the stored slot and lose the unsaved changes). Returns false if refused.
+   */
+  async selectChannel(index: number): Promise<boolean> {
+    const queue = this.queue;
+    const s = this.stateValue;
+    if (!queue || !this.canWrite() || index === s.patchIndex) return false;
+    if (!(SELECTABLE_CHANNELS as readonly number[]).includes(index)) return false;
+    this.addLog('info', `Selecting ${slotName(index)}`);
     try {
-      await queue.write(ADDR.currentPatch + def.at, data);
-      stamp();
+      await queue.write(ADDR.patchSelect, u2x4.encode(index));
+      return true;
     } catch (error) {
-      if (!isCancelled(error)) this.addLog('error', `Write failed: ${describe(error)}`);
+      if (!isCancelled(error)) this.addLog('error', `Channel select failed: ${describe(error)}`);
+      return false;
     }
   }
 
@@ -381,6 +505,27 @@ export class AmpConnection {
   }
 
   // ---- internals ----
+
+  /** Shows the bytes at once (rule 1), guards them (rule 2) and sends one DT1 per run. */
+  private async writeRuns(runs: readonly { offset: Address; data: readonly number[] }[]): Promise<void> {
+    const queue = this.queue;
+    if (!queue || runs.length === 0) return;
+    const stamp = (): void => {
+      const now = this.now();
+      for (const r of runs) r.data.forEach((_, i) => this.lastLocalWrite.set(r.offset + i, now));
+    };
+    stamp();
+    let current = this.stateValue.current;
+    for (const r of runs) current = current.with(r.offset, r.data);
+    this.update({ current });
+    this.updateUnsaved();
+    try {
+      await Promise.all(runs.map((r) => queue.write(ADDR.currentPatch + r.offset, r.data)));
+      stamp();
+    } catch (error) {
+      if (!isCancelled(error)) this.addLog('error', `Write failed: ${describe(error)}`);
+    }
+  }
 
   /** Reads the stored slot of a channel in the background (rule 6). */
   private async readStored(index: number): Promise<void> {
@@ -481,6 +626,7 @@ export class AmpConnection {
     this.addLog('info', `Patch change to ${slotName(index)}`);
     this.rememberLeftChannel(index);
     this.lastLocalWrite.clear(); // guards belong to the patch that was left
+    this.patchGeneration++;
     this.queue?.clear();
     this.readGeneration++; // a running read is void
     this.storedGeneration++;

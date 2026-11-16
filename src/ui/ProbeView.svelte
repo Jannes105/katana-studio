@@ -1,7 +1,7 @@
 <script lang="ts">
   // Rehearsal tab, direction C (PLAN 5, design round): amp type with variation, the six amp knobs and the noise
-  // suppressor always visible, the rest under "More" in a window from below (no scrolling). Phase 1a only shows
-  // values; the knobs do not write yet.
+  // suppressor always visible, the rest under "More" in a window from below (no scrolling). Since 1b everything
+  // here writes: knobs by dragging (double tap = stored value, with undo), LEDs by tapping.
   import {
     AMP_KNOBS,
     AMP_POWERAMP_VARIATION,
@@ -17,14 +17,41 @@
     contourFreqShift,
   } from '../model/params';
   import type { ParamDef } from '../model/schema';
-  import type { ConnectionState } from '../state/connection';
+  import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
   import { t, type Language } from './i18n';
-  import { dimmed, paramView } from './view';
+  import { canEdit, dimmed, editable, paramView } from './view';
 
-  let { s, lang }: { s: ConnectionState; lang: Language } = $props();
+  let {
+    s,
+    lang,
+    connection,
+    onUndoable,
+  }: {
+    s: ConnectionState;
+    lang: Language;
+    connection: AmpConnection;
+    /** A reset or revert happened: the app offers "Undo" for a moment (PLAN 4.5 rule 7). */
+    onUndoable: (text: string, result: WriteResult) => void;
+  } = $props();
   let more = $state(false);
+
+  function set(def: ParamDef, raw: number): void {
+    if (editable(s, def)) void connection.setValue(def, raw);
+  }
+  async function reset(def: ParamDef): Promise<void> {
+    if (!editable(s, def)) return;
+    const result = await connection.revertParam(def);
+    if (result && result.previous.length > 0) onUndoable(t(lang, 'undo.reset', { name: def.label }), result);
+  }
+  async function revertAll(): Promise<void> {
+    const result = await connection.revertAll();
+    if (result && (result.previous.length > 0 || result.skipped > 0)) {
+      onUndoable(t(lang, 'undo.revertAll'), result);
+    }
+  }
+  const unsaved = $derived(s.unsavedKnown && s.unsaved.length > 0);
 
   const type = $derived(paramView(s, AMP_TYPE));
   const variation = $derived(paramView(s, AMP_VARIATION));
@@ -55,6 +82,9 @@
     stored={v.stored === null ? null : v.stored - off}
     min={def.min - off}
     max={def.max - off}
+    enabled={editable(s, def)}
+    onchange={(x) => set(def, x + off)}
+    onreset={() => void reset(def)}
     {...off !== 0 ? { format: signed } : {}}
   />
 {/snippet}
@@ -63,16 +93,29 @@
   <div class="sect">
     <span class="title">{t(lang, 'probe.amp')}</span>
     <i></i>
-    <span class="ledlabel" class:on={variation.value === 1}>
+    <button
+      class="ledlabel"
+      class:on={variation.value === 1}
+      aria-pressed={variation.value === 1}
+      disabled={!editable(s, AMP_VARIATION)}
+      onclick={() => set(AMP_VARIATION, variation.value === 1 ? 0 : 1)}
+    >
       <span class="led" class:lit={variation.value === 1} class:changed={variation.changed}></span>
       {AMP_VARIATION.label}
-    </span>
+    </button>
   </div>
-  <div class="selector" role="radiogroup" aria-label={t(lang, 'probe.ampType')} aria-readonly="true">
+  <div class="selector" role="radiogroup" aria-label={t(lang, 'probe.ampType')}>
     {#each AMP_TYPE_NAMES as name, i (name)}
-      <span class="choice" class:sel={type.value === i} role="radio" aria-checked={type.value === i}>
+      <button
+        class="choice"
+        class:sel={type.value === i}
+        role="radio"
+        aria-checked={type.value === i}
+        disabled={!editable(s, AMP_TYPE)}
+        onclick={() => set(AMP_TYPE, i)}
+      >
         <span class="led" class:lit={type.value === i} class:changed={type.changed}></span>{name}
-      </span>
+      </button>
     {/each}
   </div>
   <div class="row">
@@ -84,7 +127,17 @@
   <div class="sect">
     <span class="title">{t(lang, 'probe.ns')}</span>
     <i></i>
-    <span class="led" class:lit={nsOn.value === 1} class:changed={nsOn.changed} aria-hidden="true"></span>
+    <button
+      class="ledlabel"
+      class:on={nsOn.value === 1}
+      aria-pressed={nsOn.value === 1}
+      aria-label={NS_SWITCH.label}
+      disabled={!editable(s, NS_SWITCH)}
+      onclick={() => set(NS_SWITCH, nsOn.value === 1 ? 0 : 1)}
+    >
+      <span class="led" class:lit={nsOn.value === 1} class:changed={nsOn.changed}></span>
+      {nsOn.value === 1 ? t(lang, 'fx.on') : t(lang, 'fx.off')}
+    </button>
   </div>
   <div class="row">
     {@render knob(NS_THRESHOLD)}
@@ -97,24 +150,29 @@
       <span class="moresub">{t(lang, 'probe.moreSub')}</span>
     </button>
   </div>
-  <p class="hint">{t(lang, 'probe.readOnlyHint')}</p>
+  <button class="revert" disabled={!unsaved || !canEdit(s)} onclick={() => void revertAll()}>
+    {t(lang, 'action.revertAll')}
+  </button>
+  <p class="hint">{t(lang, 'probe.hint')}</p>
 </div>
 
 {#if more}
   <Sheet title={t(lang, 'probe.more')} closeLabel={t(lang, 'sheet.close')} onClose={() => (more = false)}>
     <div class:dim={dimmed(s)}>
       <div class="sect"><span class="title">{CONTOUR_SELECT.label}</span><i></i></div>
-      <div class="selector four" role="radiogroup" aria-label={CONTOUR_SELECT.label} aria-readonly="true">
+      <div class="selector four" role="radiogroup" aria-label={CONTOUR_SELECT.label}>
         {#each CONTOUR_NAMES as name, i (name)}
-          <span
+          <button
             class="choice"
             class:sel={contour.value === i}
             role="radio"
             aria-checked={contour.value === i}
+            disabled={!editable(s, CONTOUR_SELECT)}
+            onclick={() => set(CONTOUR_SELECT, i)}
           >
             <span class="led" class:lit={contour.value === i} class:changed={contour.changed}></span>
             {i === 0 ? t(lang, 'probe.contourOff') : name}
-          </span>
+          </button>
         {/each}
       </div>
       <div class="row">
@@ -125,10 +183,16 @@
         {/if}
         {@render knob(AMP_RESONANCE)}
         <div class="cell">
-          <span class="ledlabel big" class:on={powerAmp.value === 1}>
+          <button
+            class="ledlabel big"
+            class:on={powerAmp.value === 1}
+            aria-pressed={powerAmp.value === 1}
+            disabled={!editable(s, AMP_POWERAMP_VARIATION)}
+            onclick={() => set(AMP_POWERAMP_VARIATION, powerAmp.value === 1 ? 0 : 1)}
+          >
             <span class="led" class:lit={powerAmp.value === 1} class:changed={powerAmp.changed}></span>
             {powerAmp.value === 1 ? t(lang, 'fx.on') : t(lang, 'fx.off')}
-          </span>
+          </button>
           <span class="celllabel">{t(lang, 'probe.powerAmp')}</span>
         </div>
       </div>
@@ -157,6 +221,30 @@
   }
   .ledlabel.on {
     color: var(--fg);
+  }
+  /* LEDs and choices are buttons: no button look, and not dimmed when locked (the panel dims as a whole). */
+  button.ledlabel:not(.big),
+  button.choice {
+    background: none;
+    border: none;
+    border-radius: 10px;
+  }
+  button.ledlabel:disabled,
+  button.choice:disabled {
+    opacity: 1;
+  }
+  button.ledlabel:not(:disabled):active,
+  button.choice:not(:disabled):active {
+    background: var(--panel-2);
+  }
+  .revert {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    background: none;
+    border: 1px solid var(--faint);
+    color: var(--fg);
+    font-weight: 600;
   }
   .selector {
     display: grid;
