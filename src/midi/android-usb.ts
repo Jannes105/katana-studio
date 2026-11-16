@@ -3,7 +3,7 @@
 // This file and the storage file helpers are the only places in the core that may use Capacitor (PLAN 4.1).
 
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import type { MessageListener, MidiMessage, Transport } from './transport';
+import type { DeviceEvent, DeviceState, DeviceTransport, MessageListener, MidiMessage } from './transport';
 import { UsbMidiParser, packetizeSysex } from './usb-midi';
 
 /** Measured on the phone (protocol-notes 3); the plugin picks automatically, these only serve as a check. */
@@ -53,14 +53,8 @@ export interface KatanaUsbPlugin {
   ): Promise<PluginListenerHandle>;
 }
 
-export type UsbConnectionState = 'closed' | 'opening' | 'open';
-
-export type UsbEvent =
-  | { kind: 'state'; state: UsbConnectionState }
-  | { kind: 'attached' }
-  | { kind: 'detached'; wasOpen: boolean }
-  | { kind: 'error'; message: string }
-  | { kind: 'log'; message: string };
+export type UsbConnectionState = DeviceState;
+export type UsbEvent = DeviceEvent;
 
 export function nativeKatanaUsb(): KatanaUsbPlugin {
   return registerPlugin<KatanaUsbPlugin>('KatanaUsb');
@@ -71,7 +65,8 @@ export function nativeKatanaUsb(): KatanaUsbPlugin {
  * caller (state layer) decides when to open, e.g. on an "attached" event or at app start when the amp is
  * already plugged in (`status()`).
  */
-export class AndroidUsbTransport implements Transport {
+export class AndroidUsbTransport implements DeviceTransport {
+  readonly name = 'USB';
   private readonly listeners = new Set<MessageListener>();
   private readonly eventListeners = new Set<(e: UsbEvent) => void>();
   private readonly parser = new UsbMidiParser();
@@ -100,6 +95,10 @@ export class AndroidUsbTransport implements Transport {
       this.parser.reset();
       this.setState('open');
     }
+  }
+
+  async isAttached(): Promise<boolean> {
+    return (await this.plugin.getStatus()).attached;
   }
 
   /** Native status: attached, permission, open. */

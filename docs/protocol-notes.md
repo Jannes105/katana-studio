@@ -320,6 +320,7 @@ descriptors but cannot claim the MIDI interface; the Android USB host API with `
 | NS threshold written | DT1 `20 00 58 01` sent while dragging, about every 32 ms, no send errors. **Audible, confirmed by the owner** | APK |
 | Full patch read on the phone | **80 DT1, 2649 data bytes, 0.284 s**, ascending, no duplicates (PC: 0.27 s). One-shot reading stays (PLAN 4.5 rule 4) | APK |
 | Auto-start of the real app (2026-11-16) | plugging in opens Katana Studio through `USB_DEVICE_ATTACHED` (`singleTask`), the plugin sees the amp with permission about 0.5 s after the start. With the test APK installed too, Android first asks which app to use ("just once" / "always"); after "always" it opens Katana Studio directly. On a cold start the attach intent reaches the plugin twice (once in `load()`, once from Capacitor); the plugin drops the duplicate | app |
+| First read and write by the real app (2026-11-16) | after plugging in, the app greeted the amp, showed "Connected, KATANA-100", read the NS threshold of the current patch correctly (40) and wrote it with the slider (one DT1 = 20 bytes in five USB-MIDI packets per value, no send error); the change was audible, confirmed by the owner | app |
 | OTG stable for 15 minutes, OTG setting | open | |
 | Battery drain per hour | open | |
 | Hum or noise through the cable | open | |

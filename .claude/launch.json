@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["testpages/serve.js"],
       "port": 8080
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5173", "--strictPort"],
+      "port": 5173
     }
   ]
 }
