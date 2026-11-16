@@ -10,10 +10,11 @@ import {
   expectCompleteRangeReplies,
   expectQueueCompletes,
   expectValidMessages,
+  isCaptureFile,
 } from '../helpers/capture-checks';
 
 const DIR = join(__dirname, '..', '..', 'captures');
-const files = existsSync(DIR) ? readdirSync(DIR).filter((f) => f.endsWith('.json')) : [];
+const files = existsSync(DIR) ? readdirSync(DIR).filter(isCaptureFile) : [];
 const load = (file: string) => parseCapture(readFileSync(join(DIR, file), 'utf8'));
 
 beforeEach(() => vi.useFakeTimers());
