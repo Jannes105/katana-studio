@@ -124,7 +124,7 @@ export const CONTOUR_SELECT = u7('contour.select', 'Contour', blk(0x00, 0x40), {
   max: CONTOUR_NAMES.length - 1,
   control: 'leds',
   display: { table: CONTOUR_NAMES },
-  status: 'D',
+  status: 'C',
 });
 
 /** Freq Shift of contour 1–3 (-50…+50, raw = shown + 50). */
@@ -134,7 +134,7 @@ export function contourFreqShift(contour: 1 | 2 | 3): ParamDef {
     max: 100,
     control: 'knob',
     display: { rawOffset: 50 },
-    status: 'D',
+    status: 'C',
   });
 }
 
@@ -231,7 +231,7 @@ function three(b1: number, b2: number): Instances {
 
 // ---- Parameters of one variation (relative to its block; byte 0 is the type) ----
 // Layout and ranges from the local analysis of BOSS Tone Studio, which parameter shows for which type from its
-// effect pages (PLAN 5, slice 5 of 1a: names and positions only). All 'D' until checked on the amp.
+// effect pages (PLAN 5, slice 5 of 1a: names and positions only). Checked on the amp 2026-11-16 (write, read back, no other byte changed).
 
 /** A knob or switch inside a variation block. */
 function inst(
@@ -240,7 +240,7 @@ function inst(
   byte: number,
   rest: Partial<ParamDef> & Pick<ParamDef, 'control'>,
 ): ParamDef {
-  return u7(key, label, byte, { ...PERCENT, status: 'D', ...rest });
+  return u7(key, label, byte, { ...PERCENT, status: 'C', ...rest });
 }
 
 /** A time in ms as four nibbles (u4x4) inside a variation block. */
@@ -255,7 +255,7 @@ function ms(key: string, label: string, byte: number, min: number, max: number, 
     control: 'knob',
     display: { unit: 'ms' },
     dragStep,
-    status: 'D',
+    status: 'C',
   };
 }
 
@@ -352,7 +352,11 @@ const REVERB_SPRING = 3;
 
 /** Reverb block (13 bytes). Byte 1 is the layer mode (Delay 2 / both / reverb), Phase 2. */
 export const REVERB_PARAMS: readonly ParamDef[] = [
-  inst('layerMode', 'Layer Mode', 1, { ...table(['Delay 2', 'Both', 'Reverb']), readonly: true }),
+  inst('layerMode', 'Layer Mode', 1, {
+    ...table(['Delay 2', 'Both', 'Reverb']),
+    readonly: true,
+    status: 'D',
+  }),
   // Shown 1–100 as in BOSS Tone Studio (raw = shown - 1).
   inst('time', 'Time', 2, { max: 99, control: 'knob', display: { rawOffset: -1 } }),
   ms('preDelay', 'Pre Delay', 3, 0, 500, 1),
@@ -382,8 +386,8 @@ function group(
     typeNames,
     paramBlocks,
     params,
-    // Switch and colour are confirmed; the instance blocks are derived (stored slots, knob reports Q3).
-    status: 'D',
+    // Switch, colour, type and the knobs of booster, delay and reverb are checked on the amp (2026-11-16).
+    status: 'C',
   };
 }
 
@@ -430,7 +434,7 @@ export function effectType(g: VariantGroup, colourValue: number): ParamDef {
     display: { table: g.typeNames },
     // Writable only once the table of names exists (otherwise the range is unknown).
     readonly: g.typeNames.length === 0,
-    status: 'D',
+    status: 'C',
   };
 }
 

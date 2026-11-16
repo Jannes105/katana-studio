@@ -5,7 +5,12 @@
   import { t, type Language } from './i18n';
   import { connectionDot, hasPatch } from './view';
 
-  let { s, lang, onStatus }: { s: ConnectionState; lang: Language; onStatus: () => void } = $props();
+  let {
+    s,
+    lang,
+    onStatus,
+    onChannels,
+  }: { s: ConnectionState; lang: Language; onStatus: () => void; onChannels: () => void } = $props();
 
   const shown = $derived(hasPatch(s));
   const dot = $derived(connectionDot(s));
@@ -14,7 +19,9 @@
 
 <header>
   <div class="channel">
-    <span class="slot">{shown ? slotName(s.patchIndex) : '––'}</span>
+    <button class="slot" onclick={onChannels} aria-label={t(lang, 'header.channels')} aria-haspopup="dialog">
+      {shown ? slotName(s.patchIndex) : '––'}
+    </button>
     <span class="meta">
       <span class="name">{shown ? s.patchName || '–' : t(lang, 'header.noPatch')}</span>
       <span class="saved" class:unsaved>
@@ -57,6 +64,7 @@
     padding: 0 8px;
     box-sizing: border-box;
     border-radius: 10px;
+    border: none;
     background: var(--display);
     box-shadow: inset 0 1px 3px rgb(0 0 0 / 60%);
     color: var(--accent);

@@ -167,3 +167,12 @@ describe('writable (PLAN 4.4: only confirmed addresses are written)', () => {
     expect(writable({ ...PATCH_NAME })).toBe(false);
   });
 });
+
+describe('status after the address check on the amp (2026-11-16)', () => {
+  it('everything of Phase 1b is writable; only layer mode and the Delay 2 switch stay locked', () => {
+    const locked = [...PATCH_PARAMS, ...VARIATION_PARAMS]
+      .filter((p) => !writable(p))
+      .map((p) => p.key.replace(/^reverb\.\d\./, 'reverb.n.'));
+    expect([...new Set(locked)].sort()).toEqual(['delay2.on', 'patch.name', 'reverb.n.layerMode']);
+  });
+});

@@ -14,9 +14,13 @@
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
   import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
-  import { hasPatch, rememberedHere } from './view';
+  import { canEdit, hasPatch, rememberedHere } from './view';
+  import { SELECTABLE_CHANNELS, type WriteResult } from '../state/connection';
 
   type Page = 'probe' | 'fx' | 'log';
+
+  /** How long "Undo" stays offered after a reset, revert or restore (PLAN 4.5 rule 7). */
+  const UNDO_MS = 6000;
 
   const LANG_KEY = 'katana-studio.lang';
   function initialLanguage(): Language {
@@ -36,6 +40,39 @@
   let lang = $state<Language>(initialLanguage());
   let page = $state<Page>('probe');
   let statusOpen = $state(false);
+  let channelsOpen = $state(false);
+  /** The last reset/revert/restore, offered for undo for a moment. */
+  let undoable = $state<{ text: string; result: WriteResult } | null>(null);
+  let undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function offerUndo(text: string, result: WriteResult): void {
+    const skipped =
+      result.skipped > 0 ? ` · ${t(lang, 'undo.skipped', { count: String(result.skipped) })}` : '';
+    undoable = { text: text + skipped, result };
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => (undoable = null), UNDO_MS);
+  }
+  async function undo(): Promise<void> {
+    const u = undoable;
+    undoable = null;
+    clearTimeout(undoTimer);
+    if (u) await connection.undo(u.result);
+  }
+  async function restore(): Promise<void> {
+    const result = await connection.restoreRemembered();
+    if (result) offerUndo(t(lang, 'undo.restore'), result);
+  }
+  async function pickChannel(index: number): Promise<void> {
+    channelsOpen = false;
+    if (index !== s.patchIndex) await connection.selectChannel(index);
+  }
+  // An undo belongs to the patch it was made on. A derived primitive only changes with the channel, not with
+  // every state update.
+  const channel = $derived(s.patchIndex);
+  $effect(() => {
+    void channel;
+    undoable = null;
+  });
   /** Result of the last backup or export, shown in the connection sheet. */
   let fileNote = $state<{ ok: boolean; text: string } | null>(null);
 
@@ -119,7 +156,7 @@
 </script>
 
 <div class="app">
-  <Header {s} {lang} onStatus={() => (statusOpen = true)} />
+  <Header {s} {lang} onStatus={() => (statusOpen = true)} onChannels={() => (channelsOpen = true)} />
 
   {#if shown && s.phase === 'waiting'}
     <div class="banner warn">{t(lang, 'banner.frozen')}</div>
@@ -145,6 +182,7 @@
       <button class="flat" onclick={() => connection.discardRemembered(index)}>
         {t(lang, 'action.discard')}
       </button>
+      <button disabled={!canEdit(s)} onclick={() => void restore()}>{t(lang, 'action.restore')}</button>
     </div>
   {/if}
 
@@ -168,13 +206,20 @@
         {/if}
       </div>
     {:else if page === 'probe'}
-      <ProbeView {s} {lang} />
+      <ProbeView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else if page === 'fx'}
       <EffectsView {s} {lang} />
     {:else}
       <div class="log"><LogView {app} {lang} /></div>
     {/if}
   </main>
+
+  {#if undoable}
+    <div class="toast" role="status">
+      <span class="grow">{undoable.text}</span>
+      <button onclick={() => void undo()}>{t(lang, 'action.undo')}</button>
+    </div>
+  {/if}
 
   <nav>
     <button class:on={page === 'probe'} onclick={() => (page = 'probe')}>
@@ -197,6 +242,30 @@
   </nav>
 </div>
 
+{#if channelsOpen}
+  <Sheet
+    title={t(lang, 'channels.title')}
+    closeLabel={t(lang, 'sheet.close')}
+    onClose={() => (channelsOpen = false)}
+  >
+    <div class="pick">
+      {#each SELECTABLE_CHANNELS as i (i)}
+        <button
+          class:on={s.patchIndex === i}
+          aria-current={s.patchIndex === i}
+          disabled={!canEdit(s)}
+          onclick={() => void pickChannel(i)}
+        >
+          {PATCH_SLOT_NAMES[i]}
+          {#if s.remembered.has(i)}<span class="mark" aria-hidden="true"></span>{/if}
+        </button>
+      {/each}
+    </div>
+    <p class="sublabel">{t(lang, 'channels.note')}</p>
+    <p class="sublabel">{t(lang, 'channels.panel')}</p>
+  </Sheet>
+{/if}
+
 {#if statusOpen}
   <Sheet
     title={t(lang, 'sheet.status')}
@@ -211,7 +280,7 @@
       <dt>{t(lang, 'fact.model')}</dt>
       <dd>{s.model ?? '–'}</dd>
       <dt>{t(lang, 'fact.writing')}</dt>
-      <dd>{s.readOnly ? t(lang, 'fact.writingLocked') : t(lang, 'fact.writingOff')}</dd>
+      <dd>{s.readOnly ? t(lang, 'fact.writingLocked') : t(lang, 'fact.writingOn')}</dd>
       <dt>{t(lang, 'fact.lastRead')}</dt>
       <dd>{s.lastReadAt === null ? '–' : fmtTime(s.lastReadAt)}</dd>
       <dt>{t(lang, 'fact.app')}</dt>
@@ -451,6 +520,52 @@
     min-height: 44px;
     padding: 0;
     font-weight: 700;
+  }
+  .toast {
+    position: sticky;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    margin: 0 14px 8px;
+    padding: 6px 6px 6px 14px;
+    border-radius: 12px;
+    background: var(--panel-2);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+  }
+  .toast button {
+    background: none;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .pick {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .pick button {
+    position: relative;
+    min-height: 64px;
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .pick button.on {
+    border: 2px solid var(--accent);
+    color: var(--accent);
+  }
+  .pick button:disabled.on {
+    opacity: 1;
+  }
+  .mark {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--warn);
   }
   .disclaimer {
     margin: 16px 0 0;

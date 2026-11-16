@@ -322,6 +322,17 @@ Wiederverbinden und bei Rückkehr in den Vordergrund (Regel 5, über das `visibi
 kein eigenes Plugin). Schreiben geht allgemein über `setValue(Parameter, Wert)` mit Begrenzung auf Min/Max und
 ohne `readonly`-Parameter; die Oberfläche von 1a nutzt es nicht.
 
+**Umgesetzt (1b, PR 2, 16.11.2026):** Geschrieben wird nur, wenn `canWrite()` stimmt (verbunden, nicht nur
+lesend, kein Lesen und kein Backup im Gang, Patch vollständig gelesen). `writeBytes()` schreibt einzelne Bytes,
+aber immer als ganzen Parameter (ein DT1 je Parameter, gleiche Adresse und Länge wie beim Ziehen, damit das
+Zusammenlegen in der Warteschlange stimmig bleibt). Bytes, die kein schreibbarer Parameter der Liste abdeckt,
+werden **nicht** geschrieben, nur gezählt (4.4: nur Adressen aus unserer Liste). Darauf bauen `revertParam`
+(Doppeltipp), `revertAll` („Alles zurück“), `restoreRemembered` („Zurückholen“, danach vergessen) und `undo`
+auf; jedes Ergebnis trägt die vorherigen Werte und einen Zähler der Patchwechsel, nach einem Wechsel wird
+`undo` verweigert (Regel 7). `selectChannel(1–8)` schickt `PATCH_SELECT`; nicht das Panel und nicht den aktiven
+Kanal (das würde den gespeicherten Platz neu laden und Ungespeichertes verlieren). Das Merken der Änderungen des
+verlassenen Kanals übernimmt die Patchwechsel-Meldung wie beim Wechsel am Amp.
+
 ### 4.6 Storage (`src/storage/`)
 
 - **Eigenes Patch-/Backup-Dateiformat** (JSON), festgelegt in Phase 1a:
@@ -601,9 +612,24 @@ zurückschreiben, prüfen), Variationsparameter in der aktiven Variation, und le
 Mitschnitt. Vorher ein Komplett-Backup. **Ergebnis 16.11.2026** (erster Lauf, nach 16 von 51 Adressen bewusst
 beendet): alle 16 geschrieben, zurückgelesen, am Amp gesehen oder gehört und wieder zurückgestellt. Damit [C]:
 An/Aus und Farbe aller fünf Effekte, Amp-Typ, Amp-Variation, Endstufen-Variation, Resonance, NS an/aus und NS
-Release (`protocol-notes.md` 2.8). **Noch [D] und in der App gesperrt:** Contour (Auswahl, Freq Shift), die
-Effekttypen und die Regler von Booster, Delay und Reverb. Sie werden vor PR 2 bzw. PR 3 mit
-`-ParamTest -Only 'contour|type'` bzw. `-Only 'booster|delay|reverb'` nachgeholt.
+Release (`protocol-notes.md` 2.8). **Zweiter Lauf, ohne Zuhören** (gleicher Abend, Claude am PC über den
+Boss-Treiber, neuer Modus `-NoAsk`, für die Regler anderer Typen `-AllTypes`): Contour (Auswahl, Freq Shift),
+alle fünf Effekttypen und alle Regler von Booster, Delay und Reverb, je in Variation 0. Jeder Wert wurde
+zurückgelesen, **kein anderes Byte des Patches** hat sich geändert, und nach dem Zurückstellen war der ganze
+Patch wie vorher. Gehört hat dabei niemand: Dass ein Byte bedeutet, was sein Name sagt, stützt sich auf das
+Speicherlayout von BTS und auf die Reglermeldungen aus Q3 (Drive, Effect Level, Feedback passen). Damit ist alles,
+was 1b schreibt, [C]. Gesperrt bleiben nur Reverb Layer Mode und der Delay-2-Schalter (Phase 2). Falls in der
+Probe ein Regler anders klingt als benannt, ist das der erste Verdacht. Die Ergebnisse des zweiten Laufs kamen
+nach dem Merge von #19 und gehen mit PR 2 rein (Wunsch 16.11.2026).
+
+PR 2 (16.11.2026): Schreibwege im State (siehe 4.5 „Umgesetzt (1b, PR 2)“) und die Oberfläche dazu. Probe-Tab:
+Regler ziehen schreibt, Doppeltipp setzt auf den gespeicherten Wert zurück; Amp-Typ, Variation und NS an/aus
+per Antippen; in „Mehr“ Contour, Freq Shift, Resonance und Endstufe. Unten „Alles zurück auf gespeichert“.
+Jedes Zurücksetzen und Zurückholen zeigt kurz einen Hinweis mit „Rückgängig“ (6 s, verfällt beim
+Kanalwechsel). Die Leiste der gemerkten Änderungen hat jetzt „Zurückholen“ neben „Verwerfen“. Das Kanal-Display
+im Kopf öffnet die Kanalwahl A1–B4 (Panel nur Anzeige, Kanäle mit gemerkten Änderungen haben einen Punkt).
+Im Browser mit dem Mock durchgespielt; am Amp noch nicht. **Offen:** Bytes außerhalb unserer Liste (z. B. die
+Mod- und FX-Regler am Amp) setzt „Alles zurück“ nicht zurück; der Hinweis nennt ihre Zahl.
 
 **1c – Speichern**
 - **Speichern** auf den aktuellen Kanal: mit Bestätigung, Quittung abwarten, zurücklesen, vergleichen.
