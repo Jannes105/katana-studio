@@ -8,6 +8,7 @@
     value,
     min = 0,
     max = 100,
+    step = 1,
     stored = null,
     enabled = false,
     format = (v: number) => String(v),
@@ -20,6 +21,8 @@
     value: number | undefined;
     min?: number;
     max?: number;
+    /** Value change per drag step (e.g. 5 for a delay time in ms), so large ranges stay short to drag. */
+    step?: number;
     stored?: number | null;
     enabled?: boolean;
     format?: (v: number) => string;
@@ -69,9 +72,9 @@
   aria-readonly={!enabled}
   use:relativeDrag={{
     axis: 'y',
-    pxPerStep: Math.max(0.6, 260 / Math.max(1, max - min)),
-    get: () => value ?? min,
-    set: (x) => onchange(Math.min(max, Math.max(min, x))),
+    pxPerStep: Math.max(0.6, 260 / Math.max(1, (max - min) / step)),
+    get: () => (value ?? min) / step,
+    set: (x) => onchange(Math.min(max, Math.max(min, x * step))),
     enabled: () => enabled,
     ...(onreset ? { onDoubleTap: onreset } : {}),
     onDrag: (d) => {

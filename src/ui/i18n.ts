@@ -53,9 +53,10 @@ const en = {
   'fx.off': 'Off',
   'fx.back': 'Back to effects',
   'fx.variation': 'Variation',
-  'fx.variationNote': 'The lit one is active on the amp. Adjusting edits the active one.',
+  'fx.variationNote':
+    'The lit one is active on the amp; tap another to switch, like the button on the amp. Type and knobs below belong to the active one.',
   'fx.type': 'Type',
-  'fx.knobsLater1b': 'The knobs of this effect come with the next version.',
+  'fx.knobs': 'Knobs',
   'fx.knobsLaterPhase2': 'The knobs depend on the type; they come in a later phase.',
   'fx.typeNamesLater':
     'Type names follow once our own table of names exists; until then the number is shown.',
@@ -174,9 +175,10 @@ const de: Record<TextKey, string> = {
   'fx.off': 'Aus',
   'fx.back': 'Zurück zu Effekte',
   'fx.variation': 'Variation',
-  'fx.variationNote': 'Die leuchtende ist am Amp aktiv. Einstellen ändert die aktive.',
+  'fx.variationNote':
+    'Die leuchtende ist am Amp aktiv; antippen schaltet um wie der Taster am Amp. Typ und Regler darunter gehören zur aktiven.',
   'fx.type': 'Typ',
-  'fx.knobsLater1b': 'Die Regler dieses Effekts kommen mit der nächsten Version.',
+  'fx.knobs': 'Regler',
   'fx.knobsLaterPhase2': 'Die Regler hängen vom Typ ab; sie kommen in einer späteren Phase.',
   'fx.typeNamesLater':
     'Typnamen folgen, sobald unsere eigene Namenstabelle steht; bis dahin steht die Nummer da.',

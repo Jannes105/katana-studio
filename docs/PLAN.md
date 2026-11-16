@@ -629,7 +629,17 @@ Jedes Zurücksetzen und Zurückholen zeigt kurz einen Hinweis mit „Rückgängi
 Kanalwechsel). Die Leiste der gemerkten Änderungen hat jetzt „Zurückholen“ neben „Verwerfen“. Das Kanal-Display
 im Kopf öffnet die Kanalwahl A1–B4 (Panel nur Anzeige, Kanäle mit gemerkten Änderungen haben einen Punkt).
 Im Browser mit dem Mock durchgespielt; am Amp noch nicht. **Offen:** Bytes außerhalb unserer Liste (z. B. die
-Mod- und FX-Regler am Amp) setzt „Alles zurück“ nicht zurück; der Hinweis nennt ihre Zahl.
+Mod- und FX-Regler am Amp) setzt „Alles zurück“ nicht zurück; der Hinweis nennt ihre Zahl. Gemergt als #20.
+
+PR 3 (16.11.2026): Effekte-Seite beschreibbar. In der Liste schaltet der Schalter jedes Effekts (und des Noise
+Suppressors) direkt an/aus, Antippen der Zeile öffnet die Seite. Auf der Effekt-Seite: An/Aus oben, die drei
+Variationen antippbar (wie der Taster am Amp), „Typ“ öffnet die Typenliste der aktiven Variation, darunter die
+Regler von Booster, Delay und Reverb für den Typ der aktiven Variation (`visibleFor`; Delay-Zeit in 5-ms-Schritten
+über `dragStep`, Bottom/Tone mit Bogen ab der Mitte, Auswahlwerte wie Range oder Phase als Knopfpaar,
+Schalter wie Solo als Schalter). Doppeltipp mit „Rückgängig“ wie im Probe-Tab. Mod und FX: An/Aus, Variation
+und Typ; ihre Regler kommen in Phase 2. Die Demo-Patches des Mocks haben jetzt plausible Werte in den
+Effektblöcken. Testplan `docs/testplan/phase-1b.md`, Version 0.3.0. Im Browser mit dem Mock durchgespielt; am
+Amp folgt der Test mit dem Release v0.3.0 (Tag nach dem Merge).
 
 **1c – Speichern**
 - **Speichern** auf den aktuellen Kanal: mit Bestätigung, Quittung abwarten, zurücklesen, vergleichen.
