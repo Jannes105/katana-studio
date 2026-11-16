@@ -331,6 +331,12 @@ Feste Regeln, damit die App in der Probe nicht hakt:
 - **Mitschnitt-Modus:** protokolliert echte Sitzungen (jede Nachricht mit Zeitstempel und Richtung) und exportiert sie als
   Datei. Diagnosewerkzeug für Probleme in der Probe und zum Klären offener Protokollfragen.
 - Mitschnitte unter `captures/` bleiben privat. Bereinigte Auszüge können als Testdaten nach `tests/fixtures/`.
+- **Umgesetzt (0b, 16.11.2026):** `src/mock/mock-amp.ts` (Mock-Amp hinter der Transport-Schnittstelle, mit
+  Verzögerungen wie am Amp und Aktionen „am Amp“: Regler, Kanaltaster, Speichern, Aus/Ein), `capture.ts`
+  (Mitschnitt im Dateiformat von `katana-probe.ps1`, damit alle Mitschnitte gleich nachspielbar sind; Obergrenze
+  200 000 Ereignisse; `sanitizeCapture` ersetzt Patch-Namen durch neutrale und entfernt die Notizen),
+  `replay.ts` (spielt einen Mitschnitt als Transport nach). `tests/local/` prüft Blocktabelle und Warteschlange
+  gegen **alle** Mitschnitte in `captures/`, läuft aber nur dort, wo der Ordner liegt (nicht in der CI).
 - **Tests gegen echte Mitschnitte von Anfang an (0b):** Der Mock bildet nur unsere Annahmen ab und würde eigene Irrtümer
   bestätigen. Abläufe wie Patchwechsel mitten im Lesen, unaufgeforderte Meldungen und vertauschte Blöcke (4.2b) werden
   deshalb aus aufgezeichneten Sitzungen nachgespielt.
