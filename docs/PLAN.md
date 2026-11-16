@@ -412,9 +412,27 @@ den NS-Threshold hörbar ändert. Interface, Altsetting, Endpunkte, Kabelnummer 
 **Fertig, wenn:** die signierte APK beim Einstecken von selbst startet, „Verbunden, KATANA-100“ zeigt und einen Parameter
 lesen und schreiben kann. Die offenen Protokollfragen sind in `protocol-notes.md` beantwortet.
 
+### Gestaltungsrunde – vor Phase 1 *(Entscheidung 16.11.2026)*
+
+Bisher ist nur festgelegt, **was** die App kann, nicht **wie sie aussieht**. Die Oberfläche aus 0b ist eine reine
+Test-Oberfläche zum Wegwerfen. Bevor die echte Oberfläche gebaut wird, kommt deshalb eine eigene Runde nur für die
+Gestaltung:
+
+1. **Nutzung klären:** Wie wird die App in der Probe benutzt? Welche Regler zuerst, was muss auf einen Blick sichtbar
+   sein, was passiert mit umgehängter Gitarre, was auf der Bühne?
+2. **Entwürfe:** die wichtigsten Bildschirme (Proben-Ansicht, Kanalwahl, Effekt-Seite, Verbindungsstatus, Log),
+   möglichst **klickbar im Browser mit dem Mock-Amp**, damit sie sich am Handy ausprobieren lassen.
+3. **Entscheiden**, dann erst die echte Oberfläche bauen. Das Bedienkonzept unten ist dabei ein Vorschlag, kein
+   fester Stand.
+
+**Flexibilität:** Alles unterhalb von `src/ui/` (Protokoll, Warteschlange, State, Mock) ist frei von Darstellung; ESLint
+erzwingt das. Die Oberfläche lässt sich daher jederzeit und auch mehrfach umgestalten, ohne den Rest anzufassen.
+Festgelegt sind nur Svelte als Werkzeug und Webtechnik in der App. Nach den ersten Proben mit Phase 1 ist ein
+Umgestalten ausdrücklich eingeplant.
+
 ### Phase 1 – Proben-App
 
-**Bedienkonzept** (gilt ab hier): Hochformat, Bedienung mit einer Hand. **Keine Drehregler**, sondern große waagerechte
+**Bedienkonzept** (Vorschlag, wird in der Gestaltungsrunde überprüft): Hochformat, Bedienung mit einer Hand. **Keine Drehregler**, sondern große waagerechte
 Schieber mit Knöpfen für ±1/±5. Doppeltipp setzt auf den gespeicherten Wert zurück. Ein Regler springt beim Antippen **nicht**
 auf die Tippstelle, er ändert sich nur durch Ziehen (Schutz vor Lautstärkesprüngen). Dunkles Design, Bildschirm bleibt an,
 solange die App im Vordergrund und mit dem Amp verbunden ist. Sperrknopf gegen versehentliches Berühren.
@@ -483,6 +501,13 @@ Ende-zu-Ende-Tests der Oberfläche kommen später.
 **Veröffentlichung:** Nur per **Versions-Tag** (z. B. `v0.3.0`) entsteht ein GitHub Release mit APK. Das ist die Version für
 die Probe. `versionCode` wird automatisch hochgezählt, sonst lehnt Android das Update ab. Die App zeigt ihre Version in den
 Einstellungen und im Protokoll-Export. Neue Versionen lädst du von der Release-Seite und installierst sie selbst.
+**Umgesetzt (0b):** Workflow „Release“ (`.github/workflows/release.yml`). Ablauf: Version in `package.json` erhöhen
+(per PR), nach dem Merge den passenden Tag `vX.Y.Z` auf `main` setzen. Der Workflow prüft, baut, signiert, prüft die
+Signatur und legt das Release mit `katana-studio-X.Y.Z.apk` an. Ein Tag, der nicht zur Version in `package.json` passt,
+bricht ab. `versionCode` = Laufnummer des Release-Workflows (steigt mit jedem Lauf), `versionName` = Version aus
+`package.json` (auch `src/app-info.ts` liest sie dort, es gibt nur eine Stelle). Von Hand gestartet
+(„Run workflow“) baut er dieselbe signierte APK nur als Artefakt, ohne Release. Lokale Builds bleiben unsigniert bzw.
+mit Debug-Schlüssel; eine lokal installierte Debug-Version muss vor der ersten signierten deinstalliert werden.
 
 **Signierschlüssel:** Jede APK wird damit signiert. Er liegt als verschlüsseltes Geheimnis in GitHub und **zusätzlich bei dir**
 (Passwort-Manager oder USB-Stick). Geht er verloren, gehen Updates nur noch per Deinstallieren, und dabei verschwinden die
@@ -519,7 +544,29 @@ Die Workflows lesen ihn aus den Geheimnissen `ANDROID_KEYSTORE_BASE64`, `ANDROID
 
 ## 9. Stand und Vorbereitung für Phase 0b
 
-Stand 15.11.2026 abends. Einzelheiten und Mitschnitt-Namen stehen in `docs/protocol-notes.md`.
+### 9.0 Stand Phase 0b (16.11.2026)
+
+In sechs Scheiben umgesetzt, je ein PR:
+
+1. Gerüst: Vite, Svelte, TypeScript, ESLint mit Schichtregeln, Capacitor-Android-Projekt, CI-Job `app` (Pflicht-Prüfung
+   für `main`). (#3)
+2. Protokoll-Schicht mit Tests: SysEx, Adressen, Kodierungen, Blocktabellen, Warteschlange mit den am 16.11.
+   besprochenen Regeln, Begrüßung. (#4)
+3. Mock-Amp, Mitschnitt-Modus, Nachspielen echter Mitschnitte; Blocktabelle gegen alle 33 Mitschnitte geprüft. (#5)
+4. Android-USB-Plugin mit allen Pflichten aus 4.2; Auto-Start beim Einstecken am Handy bestätigt. (#6)
+5. Minimale Oberfläche: „Verbunden, KATANA-100“, NS-Threshold lesen und schreiben (am Handy hörbar), Log-Bildschirm. (#7)
+6. Signierte APK aus der CI (Workflow „Release“), Version an einer Stelle, `versionCode` automatisch.
+
+**Fertig-Kriterium aus 5 „Phase 0b“:** erfüllt, sobald die signierte APK aus dem Release am Handy dasselbe zeigt wie die
+Debug-Version (Test nach dem Merge von Scheibe 6).
+
+Noch offen, aber nicht Teil von 0b: 9.2 C (Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne), 9.2 D 20
+(Testdaten aus Mitschnitten für die CI, Entscheidung steht aus), 9.2 E 23 (Schema der Parameterliste, vor 1b),
+große DT1 ohne Abstand messen (vor 1c), `usbtest/` löschen, sobald die echte App in der Probe funktioniert.
+
+---
+
+Stand 15.11.2026 abends (Vorbereitung, unten). Einzelheiten und Mitschnitt-Namen stehen in `docs/protocol-notes.md`.
 
 ### 9.1 Erledigt
 
@@ -592,7 +639,9 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
     der Job `test` (Tests der Testseiten), der Test-APK-Build läuft nur bei Änderungen an `usbtest/` und ist keine
     Pflicht. Seit 16.11.2026 ist zusätzlich der Job `app` (Workflow „App“: Typprüfung, Lint, Tests, Build,
     Debug-APK der echten App) Pflicht-Prüfung.
-19. **CI aufräumen:** Die Workflows nutzen Actions-Versionen, die GitHub als veraltet meldet (Node 20).
+19. ~~**CI aufräumen**~~ *weitgehend erledigt 16.11.2026:* checkout, setup-node, setup-java, setup-gradle und
+    upload-artifact laufen überall auf v5 (Node 24). Offen sind nur die Pages-Actions (`configure-pages`,
+    `upload-pages-artifact`, `deploy-pages`) in `pages.yml`, sobald es dafür Node-24-Versionen gibt.
 20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
     (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
     -Werte öffentlich im Repo stehen dürfen, oder ob sie ersetzt werden.
