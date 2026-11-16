@@ -27,6 +27,11 @@ export function createApp(): App {
   const connection = new AmpConnection(device, {
     wrapTransport: (t) => (recorder = new CaptureRecorder(t, { appVersion: APP_VERSION })),
   });
+  // PLAN 4.5 rule 5: read again when the app comes back to the foreground (the Android WebView reports this as a
+  // visibility change, no extra plugin needed).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') connection.onForeground();
+  });
   return {
     connection,
     device,
