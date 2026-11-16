@@ -29,6 +29,8 @@ import { SendQueue, type Diagnostic } from '../protocol/queue';
 import { hex, type ParsedMessage } from '../protocol/sysex';
 import { PATCH_NAME } from '../model/params';
 import { PatchImage, patchBlockAt, readText } from '../model/patch';
+import type { BackupFile, PatchFile } from '../storage/format';
+import { patchFileFrom, readBackup, type FileMeta } from './backup';
 import { encodingSize, type ParamDef } from '../model/schema';
 
 export const ECHO_GUARD_MS = 300;
@@ -48,6 +50,8 @@ export interface ConnectionState {
   readonly phase: Phase;
   readonly device: string;
   readonly model: string | null;
+  /** Model code from the identity reply (06 = KATANA-100). */
+  readonly modelCode: number | null;
   readonly readOnly: boolean;
   readonly warnings: readonly GreetingWarning[];
   readonly error: string | null;
@@ -68,6 +72,8 @@ export interface ConnectionState {
   readonly reading: boolean;
   /** Time of the last complete read of the current patch. */
   readonly lastReadAt: number | null;
+  /** True while a complete backup is being read. */
+  readonly backingUp: boolean;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'in' | 'out';
@@ -90,6 +96,7 @@ const INITIAL: ConnectionState = {
   phase: 'starting',
   device: '',
   model: null,
+  modelCode: null,
   readOnly: false,
   warnings: [],
   error: null,
@@ -103,6 +110,7 @@ const INITIAL: ConnectionState = {
   remembered: new Map(),
   reading: false,
   lastReadAt: null,
+  backingUp: false,
 };
 
 export function slotName(index: number | null): string {
@@ -222,6 +230,7 @@ export class AmpConnection {
       this.update({
         phase: 'connected',
         model: modelName(g.modelCode),
+        modelCode: g.modelCode,
         readOnly: g.readOnly,
         warnings: g.warnings,
       });
@@ -319,6 +328,36 @@ export class AmpConnection {
     } catch (error) {
       if (!isCancelled(error)) this.addLog('error', `Write failed: ${describe(error)}`);
     }
+  }
+
+  /**
+   * Reads a complete backup (PLAN 4.6), read-only. Rejects while not connected, while reading, or when the
+   * amp is unplugged or the channel changes during the backup; there is never half a file.
+   */
+  async readBackup(meta: FileMeta): Promise<BackupFile> {
+    const queue = this.queue;
+    const s = this.stateValue;
+    if (!queue || s.phase !== 'connected') throw new Error('Not connected');
+    if (s.reading || s.backingUp) throw new Error('Busy, try again in a moment');
+    this.update({ backingUp: true });
+    this.addLog('info', 'Backup: reading SYSTEM, stored slots and the current patch');
+    const started = this.now();
+    try {
+      const file = await readBackup(queue, s.patchIndex, meta);
+      this.addLog('info', `Backup read in ${((this.now() - started) / 1000).toFixed(1)} s`);
+      return file;
+    } catch (error) {
+      const text = isCancelled(error) ? 'Backup aborted (channel change or amp unplugged)' : describe(error);
+      this.addLog('error', text);
+      throw new Error(text, { cause: error });
+    } finally {
+      this.update({ backingUp: false });
+    }
+  }
+
+  /** The current patch as a patch file, from the mirror (nothing is read). */
+  currentPatchFile(meta: FileMeta): PatchFile {
+    return patchFileFrom(this.stateValue.current, this.stateValue.patchIndex, meta);
   }
 
   /** Forgets the remembered changes of a channel ("discard"). */
