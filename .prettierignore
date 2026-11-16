@@ -1,0 +1,13 @@
+# Prettier formats only the app (src, tests) and its config files.
+docs/
+testpages/
+usbtest/
+prototype/
+tools/
+captures/
+android/
+dist/
+node_modules/
+package-lock.json
+*.md
+.github/
