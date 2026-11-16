@@ -257,6 +257,10 @@ Offset of the block (7-bit, relative to the patch base) and its length in bytes:
 | `01 1C 00` | 5 |
 | `01 1E 00` | 1 |
 
+Checked 2026-11-16 against every capture in `captures/` (`tests/local/captures.test.ts`): each recorded range
+request was answered with exactly the blocks of this table (and of the SYSTEM table below), and the app's send
+queue completes each of them when the capture is replayed. [C 2026-11-16]
+
 This table is what "a range request is complete when all expected block addresses have arrived" (PLAN 4.2) needs,
 and it is the block table for backups (PLAN 4.6). What the blocks mean is only known for name, amp and NS.
 
