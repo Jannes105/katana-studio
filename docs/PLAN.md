@@ -351,6 +351,10 @@ ohne `readonly`-Parameter; die Oberfläche von 1a nutzt es nicht.
   Export über das Teilen-Menü (`@capacitor/filesystem` schreibt in den Cache, `@capacitor/share` teilt;
   `src/storage/files-android.ts`), im Browser als Download. Zusätzlich „Diesen Patch sichern“ als Patch-Datei aus
   dem Spiegel, ohne Lesen. Knöpfe im Verbindungsfenster. Zurückspielen kommt mit 1c.
+- **`.tsl` geprüft (1a, Scheibe 7, 16.11.2026):** billig, deshalb schon in 1a. Eine Gen-3-`.tsl` ist JSON mit je
+  Patch „Blockname → Bytes als Hex-Texte“, und die 80 Blocknamen liegen eins zu eins auf unserer Blocktabelle
+  (`protocol-notes.md` 2.14). Export „Diesen Patch als .tsl“ und „A1–B4 als .tsl“ (acht Patches aus einem
+  Komplett-Backup) in `src/storage/tsl.ts`. Ob BTS die Datei annimmt, prüft der Testplan von 1a.
 - Die Bibliothek (Phase 4) legt **Dateien in einem sichtbaren Ordner** ab (Dokumente) statt in einer App-Datenbank:
   Sie überleben eine Deinstallation und brauchen keine Migrationen. Ein Index für die Suche darf in der App liegen,
   weil er sich aus den Dateien neu aufbauen lässt.
@@ -552,7 +556,10 @@ die aktive ist hervorgehoben, geänderte Typen orange. Regler folgen mit 1b (Boo
 Delay 8, Reverb 5), damit sind die Effekttypen auch beschreibbar (für 1b). Dazu kamen Contour (Auswahl Aus/1/2/3,
 Freq Shift je Contour) und Endstufen-Variation in die Liste und ins Fenster „Mehr“. Quelle für Namen und Lagen ist
 eine lokale Analyse der BTS-Dateien (`tools/extract-bts.js` nach `bts-extract/`, beides nicht im Repo, von
-ESLint und Prettier ausgenommen); jeder Wert in den Mitschnitten liegt in diesen Bereichen.
+ESLint und Prettier ausgenommen); jeder Wert in den Mitschnitten liegt in diesen Bereichen. Gemergt als #15.
+Scheibe 6: Dateiformat und Komplett-Backup (siehe 4.6), gemergt als #16. Scheibe 7 (16.11.2026): `.tsl`-Export
+(siehe 4.6), Testplan `docs/testplan/phase-1a.md`, Version 0.2.0. **Offen für den Abschluss von 1a:** der Testplan am
+Amp mit dem Handy (Fertig-Kriterium oben) und das Release v0.2.0 (Tag nach dem Merge).
 
 **1b – Live einstellen**
 - Kanäle A1–B4 wählen (Panel nur anzeigen).

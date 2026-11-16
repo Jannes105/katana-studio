@@ -311,6 +311,20 @@ nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has 
   over the phone's bulk endpoint, which may be faster than the PC driver. Until tested, large writes keep a gap
   (check before Phase 1c), and the pair burst is repeated once with the test APK.
 
+### 2.14 The .tsl file of BOSS Tone Studio (Gen 3)
+
+From local analysis of BOSS Tone Studio (2026-11-16), [D]; to be confirmed by importing our export into BOSS Tone
+Studio (test plan 1a, section 4).
+
+- JSON: `{ "name", "formatRev": "0000", "device": "KATANA Gen3", "data": [[ entry, … ]] }`, one entry per patch,
+  `{ "memo": { "memo": "", "isToneCentralPatch": false }, "paramSet": { "PATCH%COM": ["4B", …], … } }`.
+- `paramSet` holds every block of the patch under its name, as an array of two-digit hex strings (one per byte).
+  The 80 names map one to one onto the block table of 2.12 (same offsets, same order): `PATCH%COM` = `00 00`
+  (name), `PATCH%AMP` = `06 00`, `PATCH%NS` = `58 00`, … , `PATCH%PATCH_KNOB_SOLO_DELAY_READONLY` = `01 1E 00`.
+  Our table of names is in `src/storage/tsl.ts`.
+- On import BOSS Tone Studio fills blocks missing from a file with defaults and accepts other devices only through
+  its converter.
+
 ## 3. USB transport (Phase 0a, measured 2026-11-15 on the Nothing Phone (3a) Pro, Android API 37)
 
 **Result: the phone talks to the amp through the test APK.** Chrome (WebUSB) can open the device and read its
