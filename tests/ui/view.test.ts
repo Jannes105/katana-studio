@@ -14,6 +14,7 @@ const base: ConnectionState = {
   phase: 'connected',
   device: 'mock',
   model: 'KATANA-100',
+  modelCode: 6,
   readOnly: false,
   warnings: [],
   error: null,
@@ -27,6 +28,7 @@ const base: ConnectionState = {
   remembered: new Map(),
   reading: false,
   lastReadAt: 0,
+  backingUp: false,
 };
 
 describe('view helpers', () => {

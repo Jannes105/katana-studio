@@ -13,6 +13,7 @@
   import Sheet from './Sheet.svelte';
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
+  import { exportFile, fileMeta } from './export';
   import { hasPatch, rememberedHere } from './view';
 
   type Page = 'probe' | 'fx' | 'log';
@@ -35,6 +36,29 @@
   let lang = $state<Language>(initialLanguage());
   let page = $state<Page>('probe');
   let statusOpen = $state(false);
+  /** Result of the last backup or export, shown in the connection sheet. */
+  let fileNote = $state<{ ok: boolean; text: string } | null>(null);
+
+  async function backupAll(): Promise<void> {
+    fileNote = null;
+    try {
+      const file = await connection.readBackup(fileMeta(s));
+      await exportFile(file, t(lang, 'backup.title'));
+      fileNote = { ok: true, text: t(lang, 'backup.done') };
+    } catch (error) {
+      fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async function savePatch(): Promise<void> {
+    fileNote = null;
+    try {
+      await exportFile(connection.currentPatchFile(fileMeta(s)), t(lang, 'backup.patchTitle'));
+      fileNote = { ok: true, text: t(lang, 'backup.patchDone') };
+    } catch (error) {
+      fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
+    }
+  }
   const remembered = $derived(rememberedHere(s));
   const shown = $derived(hasPatch(s));
 
@@ -187,6 +211,18 @@
         page = 'log';
       }}>{t(lang, 'action.openLog')}</button
     >
+
+    <p class="label">{t(lang, 'backup.title')}</p>
+    <div class="pair">
+      <button disabled={s.phase !== 'connected' || s.reading || s.backingUp} onclick={() => void backupAll()}>
+        {s.backingUp ? t(lang, 'backup.running') : t(lang, 'backup.all')}
+      </button>
+      <button disabled={!shown} onclick={() => void savePatch()}>{t(lang, 'backup.patch')}</button>
+    </div>
+    <p class="sublabel">{t(lang, 'backup.hint')}</p>
+    {#if fileNote}
+      <p class="detail" class:error={!fileNote.ok}>{fileNote.text}</p>
+    {/if}
 
     <p class="label">{t(lang, 'fact.language')}</p>
     <div class="pair">

@@ -341,6 +341,16 @@ ohne `readonly`-Parameter; die Oberfläche von 1a nutzt es nicht.
 - **`.tsl` früh prüfen (1a):** Lässt sich ein Patch mit wenig Aufwand als Gen-3-`.tsl` schreiben, kommt der Export schon
   in 1a. Dann kann BTS am PC unser Backup einspielen: ein erprobter Rückweg lange vor Phase 4 und zugleich die beste
   Prüfung der Blockzuordnung.
+- **Umgesetzt (1a, Scheibe 6, 16.11.2026):** Format in `src/storage/format.ts` (`format: "katana-studio"`,
+  `kind` `backup` oder `patch`, `formatVersion` 1, Datum, App-Version, Modellcode, `firmware` null, `memo`).
+  Rohbytes je Block als Hex ohne Leerzeichen unter dem stabilen Blockschlüssel (`000600`), Blöcke in
+  Geräte-Reihenfolge, sodass zwei Backups desselben Amps denselben Text ergeben (bis auf Zeit und Version).
+  Einlesen prüft Kennung, Version, Blockschlüssel, Länge und 7-Bit-Werte. Komplett-Backup in
+  `src/state/backup.ts`: SYSTEM, Plätze 0–8 (Anfrage endet vor dem Vorschau-Platz, Größe `01 10 00 00`) und der
+  aktuelle Patch, drei Bereichsanfragen; unvollständig, Kabelzug oder Kanalwechsel bricht ab, ohne Datei.
+  Export über das Teilen-Menü (`@capacitor/filesystem` schreibt in den Cache, `@capacitor/share` teilt;
+  `src/storage/files-android.ts`), im Browser als Download. Zusätzlich „Diesen Patch sichern“ als Patch-Datei aus
+  dem Spiegel, ohne Lesen. Knöpfe im Verbindungsfenster. Zurückspielen kommt mit 1c.
 - Die Bibliothek (Phase 4) legt **Dateien in einem sichtbaren Ordner** ab (Dokumente) statt in einer App-Datenbank:
   Sie überleben eine Deinstallation und brauchen keine Migrationen. Ein Index für die Suche darf in der App liegen,
   weil er sich aus den Dateien neu aufbauen lässt.

@@ -63,6 +63,15 @@ const en = {
   'fact.writingOff': 'not in this version',
   'fact.app': 'App',
   'fact.language': 'Language',
+  'backup.title': 'Backup',
+  'backup.all': 'Back up everything',
+  'backup.running': 'Reading…',
+  'backup.patch': 'Save this patch',
+  'backup.hint':
+    'Everything = system settings, Panel, A1–B4 and the current patch, read-only, about 3 s. Saved as a file via the share menu.',
+  'backup.done': 'Backup saved.',
+  'backup.patchTitle': 'Patch file',
+  'backup.patchDone': 'Patch saved.',
   'fact.lastRead': 'Last read',
 
   'action.retry': 'Try again',
@@ -156,6 +165,15 @@ const de: Record<TextKey, string> = {
   'fact.writingOff': 'nicht in dieser Version',
   'fact.app': 'App',
   'fact.language': 'Sprache',
+  'backup.title': 'Backup',
+  'backup.all': 'Alles sichern',
+  'backup.running': 'Lese…',
+  'backup.patch': 'Diesen Patch sichern',
+  'backup.hint':
+    'Alles = Systemeinstellungen, Panel, A1–B4 und der aktuelle Patch, nur lesend, rund 3 s. Gespeichert als Datei über das Teilen-Menü.',
+  'backup.done': 'Backup gespeichert.',
+  'backup.patchTitle': 'Patch-Datei',
+  'backup.patchDone': 'Patch gespeichert.',
   'fact.lastRead': 'Zuletzt gelesen',
 
   'action.retry': 'Nochmal versuchen',
