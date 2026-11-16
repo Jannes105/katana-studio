@@ -266,6 +266,14 @@ organisiert:
 - **Prüfung am echten Amp:** Ein Testwerkzeug liest jeden Block und vergleicht mit dem, was BTS am Display zeigt.
 - Geschrieben werden **nur Adressen aus dieser Liste**, Werte werden auf Min/Max begrenzt, `readonly` wird nie geschrieben.
 - Die Effektkette ist nur ein Parameter (Kettenvariante 0–8) plus einige Positionsschalter. Das ist billig.
+- **Umgesetzt (1a, Scheibe 1, 16.11.2026):** Schema in `src/model/schema.ts` (`ParamDef` mit Offset, Kodierung,
+  Min/Max, Darstellung, Bedienelement, `readonly`, `rehearsal` und Status C/D; `VariantGroup` für die fünf Effekte
+  mit drei Instanzen, Farbe und Schalter). Parameterliste für 1a in `src/model/params.ts`: Name, Amp mit Typ und
+  Variation, Resonance, Farben, Schalter, Typ jeder Variation, Noise Suppressor. Das Modell rechnet nur aus
+  **Rohbytes pro Block** (`PatchImage` in `src/model/patch.ts`), jeder Block hat einen stabilen Schlüssel (Offset als
+  drei Hex-Stellen, z. B. `000600`). Typ-Lagen sind aus den Speicherplätzen der Mitschnitte abgeleitet
+  (`protocol-notes.md` 2.8, Status D). Effekttypen zeigen „Type n“ und bleiben schreibgeschützt, bis unsere eigene
+  Namenstabelle existiert.
 
 ### 4.5 State (`src/state/`)
 
@@ -496,6 +504,13 @@ solange die App im Vordergrund und mit dem Amp verbunden ist. Sperrknopf gegen v
 *Fertig, wenn:* die App nach 10-mal Ab- und Anstecken jedes Mal neu verbindet, ein Kanalwechsel am Amp in unter 2 s
 erscheint und die Rohbytes zweier Backups hintereinander gleich sind.
 
+*Scheiben (abgestimmt 16.11.2026, je ein PR):* 1. Modell: Schema, Parameterliste für 1a, Decodieren aus Rohblöcken,
+Demo-Patches für den Mock. 2. Testdaten aus Mitschnitten (9.2 D 20). 3. State: ganzer Patch mit einer
+Bereichsanfrage, Kanalwechsel folgen, gespeicherter Platz und „ungespeichert“, Neu-Lesen nach Vordergrund und
+Wiederverbinden. 4. Oberfläche C: Kopf und Probe-Tab, nur lesend (ersetzt `src/ui/` aus 0b). 5. Oberfläche C:
+Effekte-Liste und Effekt-Seite, nur lesend. 6. Storage: Dateiformat und Komplett-Backup. 7. `.tsl`-Prüfung (früh,
+neben 3), Testplan `docs/testplan/phase-1a.md`, Release.
+
 **1b – Live einstellen**
 - Kanäle A1–B4 wählen (Panel nur anzeigen).
 - **Amp:** Typ, Gain, Volume, Bass, Middle, Treble, Presence (soweit vorhanden).
@@ -709,7 +724,9 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 22. ~~**Versionen festschreiben**~~ *entschieden 16.11.2026:* Capacitor 8, `minSdk 29`, `targetSdk 36`,
     Kotlin 2.2.20, JDK 21.
 23. **Schema der Parameterliste** (4.4) als Entwurf, zumindest für die Blöcke von Phase 1b (Amp, Booster, Delay,
-    Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle.
+    Reverb, Noise Suppressor, Farben). Für 0b selbst reicht die Blocktabelle. *Teilweise erledigt 16.11.2026:*
+    Schema und Liste für 1a stehen (4.4). Für 1b fehlen die Regler von Booster, Delay und Reverb und unsere
+    Typnamen-Tabellen.
 
 ### 9.3 Bereit für die Implementierung, wenn
 

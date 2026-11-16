@@ -133,9 +133,19 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `06 00` + 0 | amp gain | `u7` | [D]; the amp sent this block unsolicited as "gain/volume" [C 2026-11-15]; write unverified |
 | `06 00` + 1 | amp volume | `u7` | same as gain |
 | `06 00` + 2 | amp bass | `u7` | [D] |
-| `06 00` + 7 | amp type | `u7` | [D] |
 | `06 00` + 0 … 4 | gain, volume, bass, middle, treble (knobs in panel order) | `u7` 0–100 | [C 2026-11-15] reported, Q3 |
-| `10 00` ff. | effect blocks (FX, delay, reverb …) | | [D], details open |
+| `06 00` + 6 | unknown | `u7` | 0 in every stored slot |
+| `06 00` + 7 | amp type: 0 Acoustic, 1 Clean, 2 Pushed, 3 Crunch, 4 Lead, 5 Brown | `u7` 0–5 | [D] from the stored slots: the values fit the patch names (a "Crunch" patch 3, a "Pushed" patch 2, a lead patch 4, clean patches 1) |
+| `06 00` + 8 | presumably resonance | `u7` | [D]; 50 in every stored slot |
+| `06 00` + 9 | amp variation | `u7` 0/1 | [D]; 0 or 1 in the stored slots |
+| `0A 00`, `0C 00`, `0E 00` | booster, one block per variation (colour 0, 1, 2); byte 0 = type | 8 bytes each | [D]; the booster knob moves `0A 01` and `0A 06` (Q3) |
+| `10 00`, `12 00`, `14 00` | mod type per variation | 1 byte each | [D] |
+| `16 00`, `18 00`, `1A 00` | FX type per variation | 1 byte each | [D] |
+| `1C 00`, `1E 00`, `20 00` | mod parameters of all types, per variation | 225 bytes each | [D]; the mod knob moves `1D 37` and `1D 3B` (Q3) |
+| `22 00`, `24 00`, `26 00` | FX parameters of all types, per variation | 225 bytes each | [D]; the FX knob moves `23 19`. The knob reports were taken with colour 0 for mod; for FX `23 19` lies in the first FX block `22 00` |
+| `28 00`, `2A 00`, `2C 00` | delay per variation; byte 0 = type, bytes 1–4 = time | 17 bytes each; time `u4x4` in ms | [D]; `00 01 09 00` = 400 ms in most slots; the delay knob moves `28 05` and `28 07` |
+| `2E 00`, `30 00`, `32 00` | presumably Delay 2 per variation (same layout as delay) | 17 bytes each | [D] |
+| `34 00`, `36 00`, `38 00` | reverb per variation; byte 0 = type, byte 1 presumably layer mode (0 Delay 2, 1 both, 2 reverb) | 13 bytes each | [D]; the reverb knob moves `34 0A`; byte 1 = 1 only in a slot with Delay 2 switched on |
 | `04 00` + 0 … 4 | colour (variation 0–2) of BOOSTER, MOD, FX, DELAY, REVERB | `u7` | [C 2026-11-15] reported by the effect buttons, Q3 |
 | `08 00` + 0 … 3, 5 | on/off of BOOSTER, MOD, FX, DELAY, REVERB (+4 presumably Delay 2) | `u7` 0/1 | [C 2026-11-15] reported, Q3; +4 [D] |
 | `06 00` + 5 | presence (sixth amp knob) | `u7` | [C 2026-11-15] reported, Q3 |
@@ -262,7 +272,9 @@ request was answered with exactly the blocks of this table (and of the SYSTEM ta
 queue completes each of them when the capture is replayed. [C 2026-11-16]
 
 This table is what "a range request is complete when all expected block addresses have arrived" (PLAN 4.2) needs,
-and it is the block table for backups (PLAN 4.6). What the blocks mean is only known for name, amp and NS.
+and it is the block table for backups (PLAN 4.6). What the blocks mean: see 2.8 (name, colours, amp, switches and
+NS confirmed; the variation blocks of the five effects derived). In the code each block has a stable key, its
+offset as three hex digits (`000600` for the amp block, `011E00` for the last one).
 
 Other areas: SYSTEM has 21 blocks at `10 00 00 00` … `10 00 28 00` (every `02 00`, block `10 00 2A 00` onward
 absent). Their lengths in order (from capture `katana-probe-20261115-181535.json`, 131 bytes in total):
