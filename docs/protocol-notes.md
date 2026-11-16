@@ -313,8 +313,8 @@ nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has 
 
 ### 2.14 The .tsl file of BOSS Tone Studio (Gen 3)
 
-From local analysis of BOSS Tone Studio (2026-11-16), [D]; to be confirmed by importing our export into BOSS Tone
-Studio (test plan 1a, section 4).
+From local analysis of BOSS Tone Studio (2026-11-16). **[C 2026-11-16]**: BOSS Tone Studio imported our export
+("A1–B4 as .tsl" from v0.2.0, eight patches) into its librarian (test plan 1a, section 4).
 
 - JSON: `{ "name", "formatRev": "0000", "device": "KATANA Gen3", "data": [[ entry, … ]] }`, one entry per patch,
   `{ "memo": { "memo": "", "isToneCentralPatch": false }, "paramSet": { "PATCH%COM": ["4B", …], … } }`.

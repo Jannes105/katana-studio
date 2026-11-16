@@ -7,6 +7,10 @@ item; captures from the log screen ("Copy capture") go into `captures/` (git-ign
 Done criterion from PLAN "Phase 1a": the app reconnects every time after unplugging and plugging in 10 times, a
 channel change on the amp appears in under 2 s, and the raw bytes of two backups in a row are identical.
 
+**Status 2026-11-16 (v0.2.0):** the owner went through the plan roughly: connection, reconnecting, following the
+amp and the display all work and stay in sync. Done criterion met (details below), and BOSS Tone Studio imports
+our .tsl. Open: the finer points not ticked here.
+
 ## Setup
 
 - [ ] Uninstall a locally installed debug build first if there is one (different signing key).
@@ -15,9 +19,9 @@ channel change on the amp appears in under 2 s, and the raw bytes of two backups
 
 ## 1. Connection
 
-- [ ] **10 × unplug and plug in** the USB cable, a few seconds apart. Each time: banner "Amp unplugged · values
+- [x] **10 × unplug and plug in** the USB cable, a few seconds apart. Each time: banner "Amp unplugged · values
       frozen", values dimmed but visible; after plugging in the dot turns green and the values are read again.
-      Count: \_\_ of 10.
+      Count: \_\_ of 10. *(2026-11-16: reconnected every time)*
 - [ ] Switch the amp off and on with the app open: it greets again (editor mode on) and reads.
 - [ ] Put the app in the background for a minute, turn a knob on the amp meanwhile, bring the app back: the value
       is read again ("Back in the foreground" in the log).
@@ -25,8 +29,8 @@ channel change on the amp appears in under 2 s, and the raw bytes of two backups
 
 ## 2. Following the amp
 
-- [ ] **Channel change on the amp** A1 → B4 → PANEL → A2: name, amp and effects follow, each in **under 2 s**.
-      Slowest seen: \_\_ s.
+- [x] **Channel change on the amp** A1 → B4 → PANEL → A2: name, amp and effects follow, each in **under 2 s**.
+      Slowest seen: \_\_ s. *(2026-11-16: follows and stays in sync; time not measured)*
 - [ ] Turn GAIN, VOLUME, BASS, MIDDLE, TREBLE, PRESENCE on the amp: the knobs follow live.
 - [ ] Turn the NS threshold knob on the amp (if the panel has one) or check the value against BOSS Tone Studio.
 - [ ] After turning a knob: header shows **Unsaved**, the knob turns orange with a dot at the stored position.
@@ -50,11 +54,15 @@ channel change on the amp appears in under 2 s, and the raw bytes of two backups
 
 ## 4. Backup and files
 
-- [ ] **"Back up everything" twice in a row**, save both files (e.g. Google Drive). On the PC compare them: apart
+- [x] **"Back up everything" twice in a row**, save both files (e.g. Google Drive). On the PC compare them: apart
       from `createdAt` they are identical. (Or: send both to Claude.)
+      *(2026-11-16, 21:45 and 21:46: identical apart from `createdAt`; SYSTEM 21 blocks, Panel–B4, current patch
+      80 blocks)*
 - [ ] Pull the cable during a backup: an error is shown, no file is offered.
 - [ ] "Save this patch" gives a patch file of the current channel.
-- [ ] **.tsl check**: "A1–B4 as .tsl", copy the file to the PC, import it into the librarian of BOSS Tone Studio.
+- [x] **.tsl check**: "A1–B4 as .tsl", copy the file to the PC, import it into the librarian of BOSS Tone Studio.
+      *(2026-11-16: exported; 8 patches, every block equal to slots A1–B4 of the backup; import into BOSS Tone
+      Studio worked.)*
       The eight patches appear with their names; open two of them and compare a few values with the amp.
       Do **not** write them to the amp from BOSS Tone Studio. Result: \_\_
 - [ ] "This patch as .tsl" imports the same way.

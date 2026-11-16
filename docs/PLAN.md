@@ -354,7 +354,8 @@ ohne `readonly`-Parameter; die Oberfläche von 1a nutzt es nicht.
 - **`.tsl` geprüft (1a, Scheibe 7, 16.11.2026):** billig, deshalb schon in 1a. Eine Gen-3-`.tsl` ist JSON mit je
   Patch „Blockname → Bytes als Hex-Texte“, und die 80 Blocknamen liegen eins zu eins auf unserer Blocktabelle
   (`protocol-notes.md` 2.14). Export „Diesen Patch als .tsl“ und „A1–B4 als .tsl“ (acht Patches aus einem
-  Komplett-Backup) in `src/storage/tsl.ts`. Ob BTS die Datei annimmt, prüft der Testplan von 1a.
+  Komplett-Backup) in `src/storage/tsl.ts`. BTS hat die Datei am 16.11.2026 importiert (Testplan 1a): ein
+  erprobter Rückweg für unsere Backups, lange vor Phase 4.
 - Die Bibliothek (Phase 4) legt **Dateien in einem sichtbaren Ordner** ab (Dokumente) statt in einer App-Datenbank:
   Sie überleben eine Deinstallation und brauchen keine Migrationen. Ein Index für die Suche darf in der App liegen,
   weil er sich aus den Dateien neu aufbauen lässt.
@@ -558,8 +559,15 @@ Freq Shift je Contour) und Endstufen-Variation in die Liste und ins Fenster „M
 eine lokale Analyse der BTS-Dateien (`tools/extract-bts.js` nach `bts-extract/`, beides nicht im Repo, von
 ESLint und Prettier ausgenommen); jeder Wert in den Mitschnitten liegt in diesen Bereichen. Gemergt als #15.
 Scheibe 6: Dateiformat und Komplett-Backup (siehe 4.6), gemergt als #16. Scheibe 7 (16.11.2026): `.tsl`-Export
-(siehe 4.6), Testplan `docs/testplan/phase-1a.md`, Version 0.2.0. **Offen für den Abschluss von 1a:** der Testplan am
-Amp mit dem Handy (Fertig-Kriterium oben) und das Release v0.2.0 (Tag nach dem Merge).
+(siehe 4.6), Testplan `docs/testplan/phase-1a.md`, Version 0.2.0. Gemergt als #17, Release
+[v0.2.0](https://github.com/Jannes105/katana-studio/releases/tag/v0.2.0) am 16.11.2026.
+
+**Phase 1a ist abgeschlossen (16.11.2026).** Am Amp mit dem Handy und v0.2.0 grob durchgetestet: Verbinden,
+Neuverbinden nach Ab- und Anstecken (jedes Mal), Kanalwechsel und Regler am Amp folgen, Anzeige synchron. Zwei
+Backups hintereinander sind bis auf die Uhrzeit byte-gleich, die `.tsl` stimmt Block für Block mit dem Backup
+überein, und BTS am PC hat sie in seine Bibliothek importiert. **Noch offen** (kein Hindernis für 1b): die Zeit
+des Kanalwechsels ist nicht gemessen, und der Fall „Regler drehen während des Lesens“
+(`docs/testplan/phase-1a.md`).
 
 **1b – Live einstellen**
 - Kanäle A1–B4 wählen (Panel nur anzeigen).
