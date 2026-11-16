@@ -208,7 +208,7 @@
     {:else if page === 'probe'}
       <ProbeView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else if page === 'fx'}
-      <EffectsView {s} {lang} />
+      <EffectsView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else}
       <div class="log"><LogView {app} {lang} /></div>
     {/if}

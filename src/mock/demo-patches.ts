@@ -2,7 +2,8 @@
 // the UI can be tried with something that looks like a real amp. No real patch data in the repository (PLAN 4.7).
 // Laid out with our parameter list, so the mock follows the same (partly derived) offsets as the app.
 
-import { patchName } from '../protocol/encoding';
+import { patchName, u4x4 } from '../protocol/encoding';
+import { instanceParam } from '../model/schema';
 import type { Address } from '../protocol/address';
 import {
   AMP_KNOBS,
@@ -136,6 +137,42 @@ const DEMO_TYPES: readonly (readonly [number, number, number])[] = [
   [0, 3, 2], // reverb
 ];
 
+/**
+ * Invented knob values of booster, delay and reverb (raw), the same in every variation except the delay time,
+ * so the effect pages show something plausible instead of zeros.
+ */
+const DEMO_KNOBS: Readonly<Record<string, number>> = {
+  'booster.drive': 50,
+  'booster.bottom': 50,
+  'booster.tone': 55,
+  'booster.solo': 0,
+  'booster.soloLevel': 60,
+  'booster.effectLevel': 50,
+  'booster.directMix': 0,
+  'delay.time': 400,
+  'delay.feedback': 25,
+  'delay.highCut': 14,
+  'delay.effectLevel': 40,
+  'delay.directMix': 100,
+  'delay.tapTime': 50,
+  'delay.modRate': 40,
+  'delay.modDepth': 50,
+  'delay.range': 1,
+  'delay.filter': 1,
+  'delay.feedbackPhase': 0,
+  'delay.delayPhase': 0,
+  'delay.modSwitch': 0,
+  'reverb.layerMode': 2,
+  'reverb.time': 29,
+  'reverb.preDelay': 10,
+  'reverb.lowCut': 0,
+  'reverb.highCut': 14,
+  'reverb.density': 8,
+  'reverb.effectLevel': 35,
+  'reverb.directMix': 100,
+  'reverb.springColor': 50,
+};
+
 /** Writes a demo patch into memory at `base` (a stored slot or the current patch). */
 export function writeDemoPatch(
   poke: (address: Address, data: readonly number[]) => void,
@@ -156,6 +193,14 @@ export function writeDemoPatch(
     poke(base + g.switch.at, [p.on[k] ?? 0]);
     poke(base + g.colour.at, [p.colours[k] ?? 0]);
     g.typeBlocks.forEach((at, c) => poke(base + at, [DEMO_TYPES[k]?.[c] ?? 0]));
+    for (const c of [0, 1, 2]) {
+      for (const p of g.params) {
+        const def = instanceParam(g, c, p);
+        const v =
+          (DEMO_KNOBS[`${g.key}.${p.key}`] ?? p.min) + (p.key === 'time' && g.key === 'delay' ? 80 * c : 0);
+        poke(base + def.at, def.encoding === 'u4x4' ? u4x4.encode(v) : [v]);
+      }
+    }
   });
   poke(base + DELAY2_SWITCH.at, [0]);
   poke(base + NS_SWITCH.at, [p.ns[0]]);
