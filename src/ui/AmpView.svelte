@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { NS_THRESHOLD_MAX, NS_THRESHOLD_MIN, slotName, type AmpConnection } from '../state/connection';
+  // Phase 0b test screen, replaced by the direction C UI in Phase 1a (slice 4).
+  import { NS_THRESHOLD } from '../model/params';
+  import { readRaw } from '../model/patch';
+  import { slotName, type AmpConnection } from '../state/connection';
   import { fromStore } from 'svelte/store';
   import { t, type Language } from './i18n';
 
@@ -9,10 +12,15 @@
   // svelte-ignore state_referenced_locally
   const store = fromStore(connection);
   const s = $derived(store.current);
-  const canWrite = $derived(s.phase === 'connected' && !s.readOnly && !s.reading && s.nsThreshold !== null);
+  const threshold = $derived(readRaw(s.current, NS_THRESHOLD) ?? null);
+  const canWrite = $derived(s.phase === 'connected' && !s.readOnly && !s.reading && threshold !== null);
+
+  function set(v: number): void {
+    void connection.setValue(NS_THRESHOLD, v);
+  }
 
   function step(delta: number): void {
-    if (s.nsThreshold !== null) void connection.setNsThreshold(s.nsThreshold + delta);
+    if (threshold !== null) set(threshold + delta);
   }
 </script>
 
@@ -44,17 +52,17 @@
 <section class="param" class:frozen={s.phase !== 'connected'}>
   <div class="head">
     <p class="label">{t(lang, 'param.nsThreshold')}</p>
-    <p class="number">{s.nsThreshold ?? '–'}</p>
+    <p class="number">{threshold ?? '–'}</p>
   </div>
   <input
     type="range"
-    min={NS_THRESHOLD_MIN}
-    max={NS_THRESHOLD_MAX}
+    min={NS_THRESHOLD.min}
+    max={NS_THRESHOLD.max}
     step="1"
-    value={s.nsThreshold ?? 0}
+    value={threshold ?? 0}
     disabled={!canWrite}
     aria-label={t(lang, 'param.nsThreshold')}
-    oninput={(e) => void connection.setNsThreshold(Number(e.currentTarget.value))}
+    oninput={(e) => set(Number(e.currentTarget.value))}
   />
   <div class="steps">
     <button disabled={!canWrite} onclick={() => step(-5)}>−5</button>

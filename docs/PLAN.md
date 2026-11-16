@@ -310,6 +310,17 @@ Feste Regeln, damit die App in der Probe nicht hakt:
    Wiederverbinden neu lesen, nichts schreiben.
 10. **Speichern** auf einen Amp-Speicherplatz nur nach ausdrücklicher Bestätigung.
 
+**Umgesetzt (1a, Scheibe 3, 16.11.2026)** in `src/state/connection.ts`: Der State hält den aktuellen Patch und den
+gespeicherten Platz des Kanals als Rohbytes pro Block (`PatchImage`). Gelesen wird mit **einer** Bereichsanfrage
+(Regel 4), danach der gespeicherte Platz im Hintergrund (Regel 6); „ungespeichert“ ist der Byte-Vergleich beider,
+ebenso nach jedem Speichern am Amp (`7F 00 01 04`, Platz wird neu gelesen). Meldungen des Amps werden nach Adresse
+eingearbeitet; kommt eine Reglermeldung während des Lesens vor ihrem Block, wird sie verworfen, weil der Block
+danach neuer ist. Beim Kanalwechsel merkt sich die App die ungespeicherten Bytes des verlassenen Kanals (Regel 7,
+Abschnitt 2), bis zum Speichern dort oder „Verwerfen“; „Zurückholen“ (schreibt) kommt mit 1b. Neu-Lesen nach
+Wiederverbinden und bei Rückkehr in den Vordergrund (Regel 5, über das `visibilitychange`-Ereignis des WebView,
+kein eigenes Plugin). Schreiben geht allgemein über `setValue(Parameter, Wert)` mit Begrenzung auf Min/Max und
+ohne `readonly`-Parameter; die Oberfläche von 1a nutzt es nicht.
+
 ### 4.6 Storage (`src/storage/`)
 
 - **Eigenes Patch-/Backup-Dateiformat** (JSON), festgelegt in Phase 1a:

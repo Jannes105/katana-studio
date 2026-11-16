@@ -1,15 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADDR, addr, storedPatchAddress } from '../../src/protocol/address';
+import { ADDR, storedPatchAddress } from '../../src/protocol/address';
 import { u2x4 } from '../../src/protocol/encoding';
-import { parseMessage } from '../../src/protocol/sysex';
+import { buildDt1, parseMessage } from '../../src/protocol/sysex';
 import { MockAmp } from '../../src/mock/mock-amp';
 import { MockDevice } from '../../src/mock/mock-device';
-import { AmpConnection, NS_THRESHOLD, slotName, type ConnectionState } from '../../src/state/connection';
+import { AMP_GAIN, NS_THRESHOLD, EFFECTS, effectType } from '../../src/model/params';
+import { readRaw } from '../../src/model/patch';
+import { AmpConnection, slotName, type ConnectionState } from '../../src/state/connection';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 const tick = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+/** Long enough for greeting, current patch and stored slot (mock: about 3 ms per block, 2 × 80 blocks). */
+const SETTLE = 1000;
+const NS = ADDR.currentPatch + NS_THRESHOLD.at;
+const GAIN = ADDR.currentPatch + AMP_GAIN.at;
 
 async function started(amp = new MockAmp()) {
   const device = new MockDevice(amp);
@@ -17,28 +23,41 @@ async function started(amp = new MockAmp()) {
   const states: ConnectionState[] = [];
   connection.subscribe((s) => states.push(s));
   void connection.start();
-  await tick(500);
+  await tick(SETTLE);
   return { amp, device, connection, states };
 }
 
-const writes = (amp: MockAmp) =>
-  amp.received.map((m) => parseMessage(m)).filter((m) => m.type === 'dt1' && m.address === NS_THRESHOLD);
+const threshold = (c: AmpConnection) => readRaw(c.state.current, NS_THRESHOLD);
+const paramWrites = (amp: MockAmp) =>
+  amp.received
+    .map((m) => parseMessage(m))
+    .filter((m) => m.type === 'dt1' && m.address >= ADDR.currentPatch && m.address < ADDR.storedPatchBase);
 
-describe('AmpConnection', () => {
-  it('connects on start, greets and reads the current patch', async () => {
-    const { connection, states } = await started();
+describe('AmpConnection: connecting and reading', () => {
+  it('connects on start, greets, reads the whole current patch and its stored slot', async () => {
+    const { connection, states, amp } = await started();
     expect(states[0]?.phase).toBe('starting');
     expect(states.map((s) => s.phase)).toContain('connecting');
-    expect(connection.state).toMatchObject({
+    const s = connection.state;
+    expect(s).toMatchObject({
       phase: 'connected',
       model: 'KATANA-100',
       readOnly: false,
       patchIndex: 1,
       patchName: 'MOCK 1',
-      nsThreshold: 40,
+      storedIndex: 1,
+      unsavedKnown: true,
+      unsaved: [],
       reading: false,
     });
-    expect(slotName(connection.state.patchIndex)).toBe('A1');
+    expect(s.current.complete).toBe(true);
+    expect(s.stored.complete).toBe(true);
+    expect(threshold(connection)).toBe(40);
+    expect(slotName(s.patchIndex)).toBe('A1');
+    // One range request for the patch, one for the slot (rule 4), not one request per block.
+    const reads = amp.received.map((m) => parseMessage(m)).filter((m) => m.type === 'rq1');
+    expect(reads.filter((m) => m.type === 'rq1' && m.address === ADDR.currentPatch)).toHaveLength(1);
+    expect(reads.filter((m) => m.type === 'rq1' && m.address === storedPatchAddress(1))).toHaveLength(1);
   });
 
   it('waits when no amp is attached, connects when it is plugged in', async () => {
@@ -49,91 +68,204 @@ describe('AmpConnection', () => {
     await tick(100);
     expect(connection.state.phase).toBe('waiting');
     device.plug();
-    await tick(500);
+    await tick(SETTLE);
     expect(connection.state.phase).toBe('connected');
   });
 
-  it('writes the NS threshold, shows it at once and clamps it', async () => {
+  it('a knob turned on the amp during the read is not lost (the block came first)', async () => {
     const { amp, connection } = await started();
-    void connection.setNsThreshold(55);
-    expect(connection.state.nsThreshold).toBe(55);
-    await tick(20);
-    expect(amp.peek(NS_THRESHOLD)).toEqual([55]);
-    void connection.setNsThreshold(140);
-    await tick(20);
-    expect(amp.peek(NS_THRESHOLD)).toEqual([100]);
-    expect(connection.state.nsThreshold).toBe(100);
+    void connection.readCurrent();
+    await tick(100); // the amp block (4th of 80) has arrived, the read is still running
+    expect(connection.state.reading).toBe(true);
+    amp.turnKnob(GAIN, 77);
+    await tick(SETTLE);
+    expect(readRaw(connection.state.current, AMP_GAIN)).toBe(77);
+    expect(connection.state.unsaved).toEqual([AMP_GAIN.at]);
   });
 
-  it('follows a knob report from the amp, but not within 300 ms of an own write', async () => {
+  it('reads again when the app returns to the foreground (rule 5)', async () => {
     const { amp, connection } = await started();
-    amp.turnKnob(NS_THRESHOLD, 70);
-    await tick(20);
-    expect(connection.state.nsThreshold).toBe(70);
+    amp.poke(NS, [33]); // changed without a report (e.g. while the app was in the background)
+    connection.onForeground();
+    expect(connection.state.reading).toBe(true);
+    await tick(SETTLE);
+    expect(threshold(connection)).toBe(33);
+  });
+});
 
-    void connection.setNsThreshold(30);
+describe('AmpConnection: values, reports and "unsaved"', () => {
+  it('writes a value, shows it at once, clamps it and marks it unsaved', async () => {
+    const { amp, connection } = await started();
+    void connection.setValue(NS_THRESHOLD, 55);
+    expect(threshold(connection)).toBe(55);
+    expect(connection.state.unsaved).toEqual([NS_THRESHOLD.at]);
+    await tick(20);
+    expect(amp.peek(NS)).toEqual([55]);
+    void connection.setValue(NS_THRESHOLD, 140);
+    await tick(20);
+    expect(amp.peek(NS)).toEqual([100]);
+  });
+
+  it('never writes read-only parameters (effect types without a name table)', async () => {
+    const { amp, connection } = await started();
+    const booster = EFFECTS[0];
+    if (!booster) throw new Error('no effects');
+    const before = paramWrites(amp).length;
+    void connection.setValue(effectType(booster, 0), 3);
+    await tick(20);
+    expect(paramWrites(amp).length).toBe(before);
+  });
+
+  it('follows a knob report from the amp, but not within 300 ms of an own write (rule 2)', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(NS, 70);
+    await tick(20);
+    expect(threshold(connection)).toBe(70);
+    expect(connection.state.unsaved).toEqual([NS_THRESHOLD.at]);
+
+    void connection.setValue(NS_THRESHOLD, 30);
     await tick(10);
-    amp.turnKnob(NS_THRESHOLD, 80); // someone turns it at the same moment
+    amp.turnKnob(NS, 80); // someone turns it at the same moment
     await tick(20);
-    expect(connection.state.nsThreshold).toBe(30); // guarded
+    expect(threshold(connection)).toBe(30); // guarded
     await tick(400);
-    amp.turnKnob(NS_THRESHOLD, 81);
+    amp.turnKnob(NS, 81);
     await tick(20);
-    expect(connection.state.nsThreshold).toBe(81);
+    expect(threshold(connection)).toBe(81);
   });
 
-  it('a patch change on the amp re-reads the current patch after the burst', async () => {
+  it('turning a value back to the stored one clears "unsaved"', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(NS, 70);
+    await tick(20);
+    amp.turnKnob(NS, 40);
+    await tick(20);
+    expect(connection.state.unsaved).toEqual([]);
+  });
+
+  it('saving on the amp re-reads the slot: nothing is unsaved afterwards', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(NS, 70);
+    await tick(20);
+    expect(connection.state.unsaved).toHaveLength(1);
+    amp.saveOnAmp();
+    await tick(SETTLE);
+    expect(connection.state.unsaved).toEqual([]);
+    expect(readRaw(connection.state.stored, NS_THRESHOLD)).toBe(70);
+  });
+});
+
+describe('AmpConnection: channel changes', () => {
+  it('a patch change on the amp re-reads the current patch and its slot after the burst', async () => {
     const amp = new MockAmp();
-    amp.poke(storedPatchAddress(6) + addr(0, 0, 0x58, 0x01), [12]);
+    amp.poke(storedPatchAddress(6) + NS_THRESHOLD.at, [12]);
     const { connection } = await started(amp);
     amp.selectChannelOnAmp(6);
     await tick(40); // the patch number comes at the end of the burst (after about 31 ms in the mock)
     expect(connection.state.reading).toBe(true);
-    await tick(500);
+    await tick(SETTLE);
     expect(connection.state).toMatchObject({
       patchIndex: 6,
       patchName: 'MOCK 6',
-      nsThreshold: 12,
+      storedIndex: 6,
+      unsavedKnown: true,
       reading: false,
     });
+    expect(threshold(connection)).toBe(12);
+  });
+
+  it('appears well within 2 s (PLAN 1a done criterion)', async () => {
+    const { amp, connection } = await started();
+    amp.selectChannelOnAmp(5);
+    let at = -1;
+    for (let t = 0; t < 2000 && at < 0; t += 10) {
+      await tick(10);
+      if (connection.state.patchName === 'MOCK 5' && !connection.state.reading) at = t;
+    }
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThan(2000);
   });
 
   it('a patch change from the app (PATCH_SELECT) also re-reads', async () => {
-    const amp = new MockAmp();
-    const { connection, device } = await started(amp);
-    await device.send(
-      // as if another part of the app selected B1
-      (await import('../../src/protocol/sysex')).buildDt1(0x10, ADDR.patchSelect, u2x4.encode(5)),
-    );
-    await tick(600);
-    expect(connection.state).toMatchObject({ patchIndex: 5, patchName: 'MOCK 5' });
+    const { connection, device } = await started();
+    // as if another part of the app selected B1
+    await device.send(buildDt1(0x10, ADDR.patchSelect, u2x4.encode(5)));
+    await tick(SETTLE);
+    expect(connection.state).toMatchObject({ patchIndex: 5, patchName: 'MOCK 5', storedIndex: 5 });
   });
 
-  it('unplugging freezes the values and writes nothing; plugging in reconnects without writing', async () => {
+  it('remembers the unsaved changes of the channel that was left (PLAN 2), until discarded', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(NS, 70);
+    await tick(20);
+    amp.selectChannelOnAmp(6);
+    await tick(SETTLE);
+    expect(connection.state.remembered.get(1)).toEqual([{ offset: NS_THRESHOLD.at, value: 70 }]);
+    expect(connection.state.unsaved).toEqual([]); // B2 itself is unchanged
+
+    amp.selectChannelOnAmp(1); // back: the amp has lost the change, the app has not
+    await tick(SETTLE);
+    expect(threshold(connection)).toBe(40);
+    expect(connection.state.remembered.get(1)).toHaveLength(1);
+    connection.discardRemembered(1);
+    expect(connection.state.remembered.has(1)).toBe(false);
+  });
+
+  it('saving on the amp forgets what was remembered for that channel', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(NS, 70);
+    await tick(20);
+    amp.selectChannelOnAmp(6);
+    await tick(SETTLE);
+    amp.selectChannelOnAmp(1);
+    await tick(SETTLE);
+    expect(connection.state.remembered.has(1)).toBe(true);
+    amp.saveOnAmp();
+    await tick(SETTLE);
+    expect(connection.state.remembered.has(1)).toBe(false);
+  });
+});
+
+describe('AmpConnection: disconnects and errors', () => {
+  it('unplugging freezes the values and writes nothing; plugging in reconnects and reads without writing', async () => {
     const { amp, device, connection } = await started();
     device.unplug();
     await tick(10);
     expect(connection.state.phase).toBe('waiting');
-    expect(connection.state.nsThreshold).toBe(40); // frozen, still visible
-    void connection.setNsThreshold(10);
+    expect(threshold(connection)).toBe(40); // frozen, still visible
+    void connection.setValue(NS_THRESHOLD, 10);
     await tick(10);
-    expect(amp.peek(NS_THRESHOLD)).toEqual([40]);
+    expect(amp.peek(NS)).toEqual([40]);
 
-    const before = writes(amp).length;
+    amp.poke(NS, [44]); // changed on the amp while unplugged
+    const before = paramWrites(amp).length;
     device.plug();
-    await tick(500);
+    await tick(SETTLE);
     expect(connection.state.phase).toBe('connected');
+    expect(threshold(connection)).toBe(44); // read again after reconnecting
     expect(amp.editorMode).toBe(1); // switched on again after the "power cycle"
-    expect(writes(amp).length).toBe(before); // rule 8: no parameter written on its own
+    expect(paramWrites(amp).length).toBe(before); // rule 8: no parameter written on its own
+  });
+
+  it('reconnects every time after ten unplug/plug cycles (PLAN 1a done criterion)', async () => {
+    const { device, connection } = await started();
+    for (let i = 0; i < 10; i++) {
+      device.unplug();
+      await tick(50);
+      expect(connection.state.phase).toBe('waiting');
+      device.plug();
+      await tick(SETTLE);
+      expect(connection.state).toMatchObject({ phase: 'connected', reading: false, patchName: 'MOCK 1' });
+    }
   });
 
   it('goes read-only for another model and refuses to write', async () => {
     const amp = new MockAmp({ modelCode: 0x07 });
     const { connection } = await started(amp);
     expect(connection.state).toMatchObject({ phase: 'connected', readOnly: true });
-    void connection.setNsThreshold(55);
+    void connection.setValue(NS_THRESHOLD, 55);
     await tick(20);
-    expect(amp.peek(NS_THRESHOLD)).toEqual([40]);
+    expect(amp.peek(NS)).toEqual([40]);
   });
 
   it('shows an error when the amp does not answer, and can retry', async () => {
@@ -145,7 +277,7 @@ describe('AmpConnection', () => {
     expect(connection.state.error).toContain('No reply');
     amp.silent = false;
     void connection.connect();
-    await tick(500);
+    await tick(SETTLE);
     expect(connection.state.phase).toBe('connected');
   });
 
@@ -154,6 +286,7 @@ describe('AmpConnection', () => {
     const entries: string[] = [];
     connection.log.subscribe((all) => entries.splice(0, entries.length, ...all.map((e) => e.text)));
     expect(entries.some((e) => e.includes('Greeting done: KATANA-100'))).toBe(true);
+    expect(entries.some((e) => e.includes('Read A1 "MOCK 1": 80 blocks'))).toBe(true);
     device.unplug();
     expect(entries.at(-1)).toBe('Amp unplugged');
     connection.clearLog();
