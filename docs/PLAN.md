@@ -425,6 +425,57 @@ Gestaltung:
 3. **Entscheiden**, dann erst die echte Oberfläche bauen. Das Bedienkonzept unten ist dabei ein Vorschlag, kein
    fester Stand.
 
+**Ergebnis Schritt 1: Nutzung in der Probe** (Befragung 16.11.2026)
+
+- **Kanalwechsel am Amp bzw. Fußschalter**, nicht in der App. Die App **folgt** dem Kanal und zeigt ihn. Eine
+  Kanalwahl in der App bleibt (1b), ist aber Nebensache und darf einen Schritt tiefer liegen.
+- **Kein Regler dominiert.** Am ehesten verstellt werden **Gain, Volume, Amp-EQ** (Bass, Middle, Treble, Presence)
+  und der **Noise Suppressor** (Threshold). Das ist der Inhalt der Proben-Ansicht, und zwar **alles ohne Scrollen**.
+- **Effekte kaum:** Sie sind pro Kanal fertig eingestellt. Sie bekommen eine **eigene Seite**, nicht die
+  Proben-Ansicht. Auch ihr An/Aus-Zustand muss **nicht** auf einen Blick sichtbar sein.
+- **Auf einen Blick sichtbar:** **Kanal und Patch-Name** (groß) und der Hinweis **„ungespeichert“**. Der
+  Verbindungsstatus nur **klein in einer Ecke**.
+- **Handhaltung wechselnd:** mal in der Hand mit umgehängter Gitarre, mal abgelegt (Amp, Ständer). Folgt daraus:
+  große Bedienelemente und gut lesbar aus etwas Abstand.
+- **Speichern meist ja:** Ein Feintuning wird am Ende meist gespeichert. „Speichern“ muss gut erreichbar sein
+  (immer mit Bestätigung, 4.5 Regel 10).
+- **Bedienform offen:** Statt fester Schieber mit ±1/±5 sollen Varianten im Vergleich ausprobiert werden.
+- Besondere Störungen auf der Bühne wurden nicht genannt.
+
+**Schritt 2: Entwürfe** (16.11.2026): klickbar in `design.html` (nur Dev-Server, nicht in der APK; Code in
+`src/ui/design/`, zum Wegwerfen). Drei Richtungen für die Proben-Ansicht: **A Fader** (breite Balken, relativ
+ziehen, ±1), **B Kacheln** (große Zahlen, Antippen öffnet ein Blatt unten mit Wischfläche und ±1/±5), **C Regler**
+(Drehregler-Optik, hoch/runter ziehen, Wert groß oben beim Ziehen). Gemeinsam: Kanal und Name groß oben (antippen =
+Kanalwahl), „ungespeichert“ darunter, Verbindungspunkt klein in der Ecke, „Speichern“ und „Alles zurück“ unten,
+Leiste für gemerkte Änderungen, Seiten Effekte und Log, Zustände für getrennt, Fehler und nur lesend. Ein
+Amp-Simulator spielt Kanalwechsel, Regler und Speichern am Amp, Kabelzug und Fehler nach.
+
+**Tendenz (16.11.2026): Richtung C** (Drehregler). Effekte mit vielen Reglern bekommen je eine **eigene Seite**
+im selben Stil (Effektliste → Effekt antippen → Typ, Farbe, alle Regler); die Proben-Ansicht bleibt beim Amp und
+beim Noise Suppressor.
+
+- **Farben nah an BOSS Tone Studio** (Wunsch 16.11.2026): fast schwarzer Hintergrund (`#1A1C1F`, Flächen
+  `#292929`), weiße Schrift in Abstufungen, Akzent helles Cyan `#33D6FF` (auch die Regler), Effekt-LEDs grün
+  `#40C057`, rot `#E62B0E`, gelb `#FCC419`. Die Werte sind am installierten BTS abgelesen. Übernommen werden nur
+  Farbwerte, keine Grafiken oder Bilder (Abschnitt 2, Rechtliches). „Ungespeichert“ ist orange, damit es sich
+  vom LED-Gelb abhebt.
+- **Variationen erklären:** Grün/Rot/Gelb allein sagt nichts. Die Effektliste zeigt deshalb zur aktiven Farbe
+  den Typ („Rot · Overdrive“). Die Effekt-Seite zeigt alle drei Farben mit ihrem Typ und einen Satz Erklärung
+  (drei eigene Einstellungen je Effekt, am Amp per Taster umgeschaltet).
+- **Effekt-Seite skizziert** (`EffectDetail.svelte`): An/Aus, die drei Variationen, Typ-Auswahl, alle Regler der
+  aktiven Variation (Booster: Drive, Bottom, Tone, Effect Level, Direct Mix, Solo Level). Regler mit Mittelstellung
+  (Bottom, Tone) zeichnen ihren Bogen von der Mitte aus. Typen und Regler sind Platzhalter, bis das Schema der
+  Parameterliste (9.2 E 23) die Adressen hat.
+- **Probe-Tab = alles Allgemeine außer Effekten** (16.11.2026), in zwei Ebenen. Immer sichtbar: Amp-Typ
+  (Acoustic, Clean, Pushed, Crunch, Lead, Brown) mit Variation, die sechs Amp-Regler, NS Threshold und Release.
+  „Mehr“ öffnet ein Fenster von unten (kein Scrollen): Contour (Aus/1/2/3 mit Freq Shift), Resonance, Endstufen-Variation. EQ, Solo und
+  Send/Return sind in BTS Blöcke der Effektkette und kommen auf die Effekte-Seite (Phase 2).
+- **Feinschliff (16.11.2026), erste Runde:** näher an Hardware statt Baukasten. Regler mit Skala (11 Striche wie
+  0–10), Kappe und dünnem leuchtendem Bogen. Amp-Typ, Contour und Variation als **LED-Auswahl** wie am Gerät statt
+  Knopfreihen. Kanal als dunkles „Display“ mit leuchtender Schrift. Abschnitte mit feiner Linie statt Karten,
+  Effektliste als eine Fläche mit Trennlinien und schmalen Schaltern. Leisten mit farbigem Rand statt
+  Vollfarbe, Navigation mit Symbolen, Erklärtexte gekürzt. Speichern ist ausgefüllt nur bei Ungespeichertem.
+
 **Flexibilität:** Alles unterhalb von `src/ui/` (Protokoll, Warteschlange, State, Mock) ist frei von Darstellung; ESLint
 erzwingt das. Die Oberfläche lässt sich daher jederzeit und auch mehrfach umgestalten, ohne den Rest anzufassen.
 Festgelegt sind nur Svelte als Werkzeug und Webtechnik in der App. Nach den ersten Proben mit Phase 1 ist ein
@@ -555,10 +606,15 @@ In sechs Scheiben umgesetzt, je ein PR:
 3. Mock-Amp, Mitschnitt-Modus, Nachspielen echter Mitschnitte; Blocktabelle gegen alle 33 Mitschnitte geprüft. (#5)
 4. Android-USB-Plugin mit allen Pflichten aus 4.2; Auto-Start beim Einstecken am Handy bestätigt. (#6)
 5. Minimale Oberfläche: „Verbunden, KATANA-100“, NS-Threshold lesen und schreiben (am Handy hörbar), Log-Bildschirm. (#7)
-6. Signierte APK aus der CI (Workflow „Release“), Version an einer Stelle, `versionCode` automatisch.
+6. Signierte APK aus der CI (Workflow „Release“), Version an einer Stelle, `versionCode` automatisch. (#8, #9)
 
-**Fertig-Kriterium aus 5 „Phase 0b“:** erfüllt, sobald die signierte APK aus dem Release am Handy dasselbe zeigt wie die
-Debug-Version (Test nach dem Merge von Scheibe 6).
+**Phase 0b ist abgeschlossen (16.11.2026).** Fertig-Kriterium aus 5 erfüllt mit dem Release
+[v0.1.0](https://github.com/Jannes105/katana-studio/releases/tag/v0.1.0): Die signierte APK startet beim Einstecken von
+selbst, zeigt „Verbunden, KATANA-100“, liest den NS-Threshold richtig und schreibt ihn hörbar. Die Protokollfragen für 0b
+sind in `protocol-notes.md` beantwortet. Beim ersten Release-Lauf scheiterte nur die Signaturprüfung am anderen
+Ausgabeformat von `apksigner` (build-tools 37); behoben in #9, der Tag wurde vor dem ersten Release neu gesetzt.
+
+**Als Nächstes:** die Gestaltungsrunde (Abschnitt 5, vor Phase 1).
 
 Noch offen, aber nicht Teil von 0b: 9.2 C (Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne), 9.2 D 20
 (Testdaten aus Mitschnitten für die CI, Entscheidung steht aus), 9.2 E 23 (Schema der Parameterliste, vor 1b),
