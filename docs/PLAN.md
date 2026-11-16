@@ -523,6 +523,17 @@ Wiederverbinden. 4. Oberfläche C: Kopf und Probe-Tab, nur lesend (ersetzt `src/
 Effekte-Liste und Effekt-Seite, nur lesend. 6. Storage: Dateiformat und Komplett-Backup. 7. `.tsl`-Prüfung (früh,
 neben 3), Testplan `docs/testplan/phase-1a.md`, Release.
 
+*Stand 1a:* Scheiben 1–3 gemergt (#11, #12, #13). Scheibe 4 (16.11.2026): Die Oberfläche aus 0b ist ersetzt.
+`src/ui/App.svelte` (Kopf, Leisten für getrennt, Wiederverbinden, Fehler, nur lesend und gemerkte Änderungen mit
+„Verwerfen“, Tabs Probe/Effekte/Log), `Header.svelte` (Kanal-Display, Name, Gespeichert/Ungespeichert,
+Verbindungspunkt), `ProbeView.svelte` (Amp-Typ als LED-Auswahl, Variation, sechs Regler, Noise Suppressor mit
+LED, „Mehr“ mit Resonance), `Knob.svelte`, `Sheet.svelte`, Farben in `theme.css`. Alles nur anzeigend; geänderte
+Werte (gegen den gespeicherten Platz) sind orange mit Punkt an der gespeicherten Stellung. Hinter dem
+Verbindungspunkt: Status, Neu lesen, Neu verbinden, Log, Sprachwahl (Englisch/Deutsch, gemerkt), Hinweis
+„inoffiziell“ und im Browser die Mock-Aktionen (Kanal, Regler, Speichern am Amp, Kabel). Contour und
+Endstufen-Variation fehlen noch, weil ihre Adressen nicht bekannt sind; der Effekte-Tab ist bis Scheibe 5 ein
+Platzhalter. Der Entwurf (`design.html`, `src/ui/design/`) bleibt als Vorlage bis Ende 1a.
+
 **1b – Live einstellen**
 - Kanäle A1–B4 wählen (Panel nur anzeigen).
 - **Amp:** Typ, Gain, Volume, Bass, Middle, Treble, Presence (soweit vorhanden).

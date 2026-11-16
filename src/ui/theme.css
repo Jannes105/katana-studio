@@ -1,0 +1,101 @@
+/* Colours and base styles of the app (direction C, PLAN 5 "Gestaltungsrunde"). Colour mood after BOSS Tone Studio
+   for KATANA Gen 3: near-black, white text in steps, light cyan accent, the amp's LED colours. Only colour values,
+   no graphics (PLAN 2). "Unsaved" is orange so it stands apart from the yellow LED. */
+:root {
+  --bg: #1a1c1f;
+  --panel: #292929;
+  --panel-2: #222426;
+  --sheet: #2f3133;
+  --display: #0d0f11;
+  --knob-skirt: #1f2124;
+  --knob-cap: #34373b;
+  --knob-rim: rgb(255 255 255 / 14%);
+  --led-off: rgb(255 255 255 / 16%);
+  --line: rgb(255 255 255 / 10%);
+  --track: rgb(255 255 255 / 16%);
+  --fg: #ffffff;
+  --muted: rgb(255 255 255 / 64%);
+  --faint: rgb(255 255 255 / 36%);
+  --accent: #33d6ff;
+  --on-accent: #062a33;
+  --ok: #40c057;
+  --warn: #ff9f43;
+  --error: #e62b0e;
+  --c-green: #40c057;
+  --c-red: #e62b0e;
+  --c-yellow: #fcc419;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+/* Section title with a fine line, as in the draft. */
+.sect {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  margin-top: 4px;
+}
+.sect .title {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.sect i {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* LED as on the amp panel. */
+.led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--led-off);
+  flex: none;
+  transition:
+    background 0.12s,
+    box-shadow 0.12s;
+}
+.led.lit {
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.led.lit.changed {
+  background: var(--warn);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--warn) 70%, transparent);
+}
