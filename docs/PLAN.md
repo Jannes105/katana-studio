@@ -344,7 +344,8 @@ Feste Regeln, damit die App in der Probe nicht hakt:
   (Mitschnitt im Dateiformat von `katana-probe.ps1`, damit alle Mitschnitte gleich nachspielbar sind; Obergrenze
   200 000 Ereignisse; `sanitizeCapture` ersetzt Patch-Namen durch neutrale und entfernt die Notizen),
   `replay.ts` (spielt einen Mitschnitt als Transport nach). `tests/local/` prüft Blocktabelle und Warteschlange
-  gegen **alle** Mitschnitte in `captures/`, läuft aber nur dort, wo der Ordner liegt (nicht in der CI).
+  gegen **alle** Mitschnitte in `captures/`, läuft aber nur dort, wo der Ordner liegt (nicht in der CI). Für die
+  CI gibt es seit 1a bereinigte Auszüge in `tests/fixtures/` (siehe 9.2 D 20).
 - **Tests gegen echte Mitschnitte von Anfang an (0b):** Der Mock bildet nur unsere Annahmen ab und würde eigene Irrtümer
   bestätigen. Abläufe wie Patchwechsel mitten im Lesen, unaufgeforderte Meldungen und vertauschte Blöcke (4.2b) werden
   deshalb aus aufgezeichneten Sitzungen nachgespielt.
@@ -631,8 +632,8 @@ Ausgabeformat von `apksigner` (build-tools 37); behoben in #9, der Tag wurde vor
 
 **Als Nächstes:** die Gestaltungsrunde (Abschnitt 5, vor Phase 1).
 
-Noch offen, aber nicht Teil von 0b: 9.2 C (Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne), 9.2 D 20
-(Testdaten aus Mitschnitten für die CI, Entscheidung steht aus), 9.2 E 23 (Schema der Parameterliste, vor 1b),
+Noch offen, aber nicht Teil von 0b: 9.2 C (Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne), ~~9.2 D 20~~
+(Testdaten, erledigt in 1a), 9.2 E 23 (Schema der Parameterliste, vor 1b),
 große DT1 ohne Abstand messen (vor 1c), `usbtest/` löschen, sobald die echte App in der Probe funktioniert.
 
 ---
@@ -713,9 +714,11 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 19. ~~**CI aufräumen**~~ *weitgehend erledigt 16.11.2026:* checkout, setup-node, setup-java, setup-gradle und
     upload-artifact laufen überall auf v5 (Node 24). Offen sind nur die Pages-Actions (`configure-pages`,
     `upload-pages-artifact`, `deploy-pages`) in `pages.yml`, sobald es dafür Node-24-Versionen gibt.
-20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
-    (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
-    -Werte öffentlich im Repo stehen dürfen, oder ob sie ersetzt werden.
+20. ~~**Testdaten:**~~ *erledigt 16.11.2026 (1a, Scheibe 2):* vier bereinigte Auszüge in `tests/fixtures/`:
+    ganzer Patch mit allen Speicherplätzen und `PATCH_SELECT`, Kanalwechsel am Amp, Reglerstrom, Speichern am Amp.
+    Patch-Namen sind durch neutrale ersetzt („PATCH 1“ …), die Werte bleiben (harmlos), Notizen entfallen.
+    Erzeugt mit `MAKE_FIXTURES=1 npx vitest run tests/local/make-fixtures` (nur am eigenen PC); geprüft in der CI
+    von `tests/fixtures.test.ts` mit denselben Prüfungen wie `tests/local/captures.test.ts`.
 
 **E. Entscheidungen**
 
