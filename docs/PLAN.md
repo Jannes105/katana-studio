@@ -110,21 +110,36 @@ Lesevorgang liefert oft mehrere Pakete; unbenutzte Bytes im letzten Paket sind *
 - `USB_DEVICE_DETACHED` zur Laufzeit registrieren (`RECEIVER_NOT_EXPORTED`).
 - `launchMode="singleTask"`, Einstecken bei laufender App über `onNewIntent`.
 
-**Sende-Warteschlange** (`src/midi/queue.ts`):
+**Sende-Warteschlange** (`src/protocol/queue.ts`; liegt im Protokoll, weil sie Antworten über Adressen und
+Blocktabelle zuordnet, und `midi/` nichts aus `protocol/` laden darf. Regeln am 16.11.2026 festgelegt):
 - **Kein fester Abstand für kleine Nachrichten** (gemessen, `protocol-notes.md` 2.13): Der Amp nahm 20 DT1 ohne Pause
   an und beantwortete 30 RQ1 hintereinander vollständig. Die 20 ms von BTS entfallen. Für **große DT1** (ganze Blöcke,
   Zurückspielen in 1c) bleibt vorerst der BTS-Abstand (20 ms plus Länge ÷ 3,125 ms), bis das gemessen ist. Am Handy
-  wird der Test einmal mit der Test-APK wiederholt.
+  wird der Test einmal mit der Test-APK wiederholt. „Groß“ heißt: **mehr als 16 Datenbytes** (der Patch-Name
+  mit 16 Bytes läuft also ohne Abstand).
+- Zum Transport ist immer nur **ein Sendevorgang** unterwegs; was solange wartet, wird bei Bedarf ersetzt (siehe unten).
 - Der Amp quittiert einen geschriebenen Wert **nicht** und meldet ihn auch nicht zurück (kein Echo). Geprüft wird
   nur durch Zurücklesen. Eine Antwort zeigt den Stand zum Zeitpunkt der Antwort, nicht der Anfrage.
-- Wird ein Regler gezogen, ersetzt der neueste Wert den noch nicht gesendeten Wert derselben Adresse.
-- Lässt sich **gezielt leeren** (bei Patchwechsel, siehe 4.5).
+- Wird ein Regler gezogen, ersetzt der neueste Wert den noch nicht gesendeten Wert derselben Adresse (nur bei
+  gleicher Länge; ein Einzelwert und ein ganzer Block werden nie zusammengelegt).
+- Lässt sich **gezielt leeren** (bei Patchwechsel, siehe 4.5): Wartendes wird verworfen, die offene Anfrage
+  abgebrochen; deren späte Antworten kommen dann als normale Meldungen an.
+- **Jede** angenommene eingehende Nachricht geht an die State-Schicht, Antworten wie Meldungen. Falsche Prüfsumme
+  oder fremde Device-ID: verworfen und protokolliert, zählt auch nicht als Antwort.
+- **Sicherheitsnetz:** Die Warteschlange verweigert jeden DT1 in die Speicherplätze (`20 10 00 00` bis
+  `21 2F 7F 7F`, Vorschau-Platz eingeschlossen) und `PATCH_WRITE` ohne ausdrückliches Kennzeichen, zusätzlich zur
+  Prüfung im Modell. Freigabe für die Speicherplätze erst in Phase 4.
+- Leseanfragen gehen in der Reihenfolge raus, in der sie gestellt wurden (keine Prioritäten, bis Phase 1 sie verlangt).
 - **Immer nur ein RQ1 offen.** Die Antwort besteht bei Bereichsanfragen aus vielen DT1 (ein DT1 pro Block, siehe 4.2b).
   Antworten werden **nach Adresse zugeordnet, nicht nach Reihenfolge**: In allen späteren Läufen kamen die Blöcke
   aufsteigend, aber mit Editor-Modus an schiebt der Amp seine Meldungen (Regler, Kanalwechsel) jederzeit dazwischen.
   Ein Ende-Zeichen gibt es nicht; fertig ist die Anfrage, wenn alle erwarteten Blockadressen da sind. Das ist jetzt
   umsetzbar: Die **Blocktabelle** (80 Blöcke je Patch, 21 für SYSTEM) steht in `protocol-notes.md` 2.12 und kommt als
-  feste Tabelle in den Code. Timeout, dann eine Wiederholung, dann Verbindungsfehler.
+  feste Tabelle in den Code. Eine Einzelabfrage (kein Blockanfang, z. B. Befehlsbereich) ist mit dem ersten DT1
+  an genau ihrer Adresse fertig. **Timeout = kein Fortschritt:** 500 ms ohne passende Nachricht (gezählt ab der
+  letzten), dann eine Wiederholung der ganzen Anfrage (schon empfangene Blöcke bleiben), dann Fehler an die
+  State-Schicht. Ein fester Timeout müsste für „alle Plätze lesen“ über 3 s lang sein und würde kleine Anfragen
+  unnötig lange hängen lassen.
 - Eine Meldung des Amps, deren Adresse im Bereich der offenen Anfrage liegt, ist von einer Antwort nicht zu
   unterscheiden. Das ist unschädlich, solange der neueste Wert gewinnt (der Amp meldet ja den aktuellen Stand).
 - **Schreiben geht vor Lesen:** Ein Reglerwert (DT1) wartet nie hinter einer laufenden Hintergrund-Leseanfrage.
@@ -193,7 +208,10 @@ nötig ist es nicht.
 - Der **Befehlsbereich** `7F 00 00 0x` antwortet nur auf **Einzelabfragen** (Größe 1); eine Bereichsanfrage darüber
   bleibt unbeantwortet.
   Weicht Modellcode oder Editor-Level ab, **sperrt die App nicht**, sondern warnt deutlich und läuft **nur lesend**
-  weiter; Schreiben lässt sich dann bewusst freischalten. Eine harte Sperre würde nach einem Firmware-Update die Probe kosten. Revision und Running Mode nutzt BTS bei Gen 3 nicht, wir auch nicht.
+  weiter; Schreiben lässt sich dann bewusst freischalten. Den Editor-Modus schaltet sie bei abweichendem
+  Editor-Level trotzdem ein (wahrscheinlichster Grund: Firmware-Update am selben Amp; ohne Editor-Modus wäre die
+  App blind für Änderungen am Amp). Bei **fremdem Modell oder Hersteller** schreibt sie gar nichts, auch nicht den
+  Editor-Modus, weil unklar ist, was der Befehl dort bewirkt. Lesen geht auch ohne. (Entscheidung 16.11.2026) Eine harte Sperre würde nach einem Firmware-Update die Probe kosten. Revision und Running Mode nutzt BTS bei Gen 3 nicht, wir auch nicht.
 - Eingehende Roland-Nachrichten werden mit der gelernten Device-ID **und** mit `7F` akzeptiert (wie BTS).
 - **Abmelden** (Editor-Modus aus) versucht die App beim bewussten Trennen und beim Wechsel in den Hintergrund nach längerer
   Zeit. Auf Android gibt es aber kein verlässliches „App wird beendet“, und nach dem Abziehen lässt sich nichts mehr senden.
@@ -323,8 +341,8 @@ Feste Regeln, damit die App in der Probe nicht hakt:
 katana-studio/
   src/
     app-info.ts     Name, Untertitel, Version
-    midi/           Transport-Schnittstelle, Warteschlange, USB-MIDI-Pakete
-    protocol/       SysEx, Adressen/Kodierung, Begrüßung, Befehle
+    midi/           Transport-Schnittstelle, USB-MIDI-Pakete
+    protocol/       SysEx, Adressen/Kodierung, Blocktabelle, Warteschlange, Begrüßung, Befehle
     model/          Parameterliste (Layout + Darstellung)
     state/          Spiegel des Amps, Abläufe
     storage/        Patch-/Backup-Format, Export/Import
@@ -566,7 +584,8 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
 18. ~~**Arbeitsweise im Repo festlegen**~~ *entschieden 16.11.2026:* Branch und Pull Request, `main` geschützt
     (siehe Abschnitt 2). Eingerichtet 16.11.2026: Die Workflows laufen auch bei Pull Requests; Pflicht-Prüfung ist
     der Job `test` (Tests der Testseiten), der Test-APK-Build läuft nur bei Änderungen an `usbtest/` und ist keine
-    Pflicht. Kommt die echte App, wird ihr CI-Job zur Pflicht-Prüfung.
+    Pflicht. Seit 16.11.2026 ist zusätzlich der Job `app` (Workflow „App“: Typprüfung, Lint, Tests, Build,
+    Debug-APK der echten App) Pflicht-Prüfung.
 19. **CI aufräumen:** Die Workflows nutzen Actions-Versionen, die GitHub als veraltet meldet (Node 20).
 20. **Testdaten:** aus den Mitschnitten in `captures/` bereinigte Auszüge für `tests/fixtures/` auswählen
     (Kanalwechsel, ganzer Patch, Reglerstrom, Speichern). Vorher entscheiden, ob die eigenen Patch-Namen und
