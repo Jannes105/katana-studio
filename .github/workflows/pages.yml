@@ -3,6 +3,8 @@ name: Test pages
 on:
   push:
     branches: [main]
+  # The "test" job is the required check for merging into main (branch protection).
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,8 +13,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -28,6 +30,8 @@ jobs:
 
   deploy:
     needs: test
+    # Only deploy from main, never from a pull request.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

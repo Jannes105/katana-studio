@@ -6,6 +6,11 @@ on:
       - 'usbtest/**'
       - 'testpages/**'
       - '.github/workflows/usbtest-apk.yml'
+  pull_request:
+    paths:
+      - 'usbtest/**'
+      - 'testpages/**'
+      - '.github/workflows/usbtest-apk.yml'
   workflow_dispatch:
 
 permissions:
