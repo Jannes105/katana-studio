@@ -22,6 +22,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Start (or come to the front, singleTask) when the KATANA is plugged in (PLAN 4.2). With this
+                 filter Android offers "always open with this app" and grants the USB permission along with it. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+
         </activity>
 
         <provider
@@ -34,6 +43,9 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
     </application>
+
+    <!-- The app talks to the amp through the USB host API; without it the app has no purpose. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
 
     <!-- Permissions -->
 
