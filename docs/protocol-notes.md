@@ -72,7 +72,8 @@ F0 41 <dev> 01 05 07 <cmd> <addr x4> <data ...> <checksum> F7
   byte by byte. Convert to a linear number (`b0*128^3 + b1*128^2 + b2*128 + b3`), calculate, convert back. [D]
 - The same holds for the **size field of RQ1**: a size above 127 is not a plain byte count in the last byte.
   Range sizes in 7-bit notation work on the amp (`00 02 00 00`, `01 20 00 00`). [C 2026-11-15]
-- Implementation with tests: `testpages/shared/katana.js` (`toLinear`, `fromLinear`, `addOffset`).
+- Implementation with tests: `src/protocol/address.ts` in the app (addresses are linear numbers inside the app);
+  `testpages/shared/katana.js` (`toLinear`, `fromLinear`, `addOffset`) for the test pages.
 
 ### 2.5 Value encodings
 
@@ -260,7 +261,8 @@ This table is what "a range request is complete when all expected block addresse
 and it is the block table for backups (PLAN 4.6). What the blocks mean is only known for name, amp and NS.
 
 Other areas: SYSTEM has 21 blocks at `10 00 00 00` … `10 00 28 00` (every `02 00`, block `10 00 2A 00` onward
-absent). The setup area answers a range read with a single block `00 00 00 00` = 2 bytes (patch number as two
+absent). Their lengths in order (from capture `katana-probe-20261115-181535.json`, 131 bytes in total):
+1, 5, 2, 2, 2, 2, 11, 11, 11, 11, 11, 11, 3, 5, 5, 3, 1, 5, 1, 19, 9. [C 2026-11-15] The setup area answers a range read with a single block `00 00 00 00` = 2 bytes (patch number as two
 nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has three blocks (1, 5, 1 bytes).
 
 ### 2.13 Writes: echo and send pacing (2026-11-15)
