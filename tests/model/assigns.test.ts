@@ -69,6 +69,14 @@ describe('assign fields', () => {
     }
   });
 
+  it('target names are unique within a field (with the group: Low Rate, Voice 1 Pitch)', () => {
+    for (const f of FIELDS) {
+      const names = f.targets.map((t) => t.label);
+      expect(new Set(names).size, `${f.key}: ${names.join(', ')}`).toBe(names.length);
+    }
+    expect(fieldByKey('chorus').targets[1]?.label).toBe('Low Rate');
+  });
+
   it('picks the field by function and active type', () => {
     expect(expField(EXP_FUNCTION.delay2)?.key).toBe('delay');
     expect(expField(EXP_FUNCTION.mod, MOD_FX_TYPES.indexOf('CHORUS'))?.key).toBe('chorus');

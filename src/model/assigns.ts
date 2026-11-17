@@ -93,7 +93,9 @@ function targets(list: readonly ParamDef[], keys: readonly string[]): AssignTarg
     ...keys.map((k) => {
       const param = k === MASTER_KEY.key ? MASTER_KEY : list.find((d) => d.key === k);
       if (!param) throw new Error(`Assign target ${k} is not in the list`);
-      return { label: param.label, range: rangeOf(param), param };
+      // With the group where the effect page shows one (Low Rate, Voice 1 Pitch), so targets stay unique.
+      const label = param.group ? `${param.group} ${param.label}` : param.label;
+      return { label, range: rangeOf(param), param };
     }),
   ];
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   // App shell, direction C (PLAN 5, design round): header with channel display, banners for the connection
-  // states, the tabs Rehearsal / Effects / Log, and the connection window behind the dot in the header.
+  // states, the tabs Rehearsal / Effects / Chain / Control / Log, and the connection window behind the dot in the header.
   import { onMount } from 'svelte';
   import { fromStore } from 'svelte/store';
   import { APP_NAME, APP_SUBTITLE, APP_VERSION, DISCLAIMER } from '../app-info';
@@ -8,6 +8,7 @@
   import { AMP_KNOBS } from '../model/params';
   import Header from './Header.svelte';
   import LogView from './LogView.svelte';
+  import ControlView from './ControlView.svelte';
   import EffectsView from './EffectsView.svelte';
   import ProbeView from './ProbeView.svelte';
   import Sheet from './Sheet.svelte';
@@ -20,7 +21,7 @@
   import type { LoadResult } from '../state/connection';
   import { readPatchSource, type PatchSource } from '../storage/sources';
 
-  type Page = 'probe' | 'fx' | 'chain' | 'log';
+  type Page = 'probe' | 'fx' | 'chain' | 'ctl' | 'log';
 
   /** How long "Undo" stays offered after a reset, revert or restore (PLAN 4.5 rule 7). */
   const UNDO_MS = 6000;
@@ -383,6 +384,8 @@
       <EffectsView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else if page === 'chain'}
       <EffectsView {s} {lang} {connection} onUndoable={offerUndo} view="chain" />
+    {:else if page === 'ctl'}
+      <ControlView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else}
       <div class="log"><LogView {app} {lang} /></div>
     {/if}
@@ -419,6 +422,16 @@
         <rect x="17" y="9" width="5" height="6" rx="1.2" /><path d="M7 12h2.5M14.5 12h2.5" />
       </svg>
       {t(lang, 'tab.chain')}
+    </button>
+    <button class:on={page === 'ctl'} onclick={() => (page = 'ctl')}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 19h16M7 19v-4h4v4M13 19v-8h4v8" /><circle cx="9" cy="8" r="2" /><circle
+          cx="15"
+          cy="5"
+          r="2"
+        />
+      </svg>
+      {t(lang, 'tab.ctl')}
     </button>
     <button class:on={page === 'log'} onclick={() => (page = 'log')}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9" /></svg>
@@ -738,7 +751,8 @@
   }
   nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Five equal columns; minmax(0, …) so a long label cannot widen its column. */
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     background: var(--display);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -748,14 +762,16 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
+    min-width: 0;
+    padding: 0 2px;
     border: none;
     border-radius: 0;
     background: transparent;
     min-height: 64px;
     color: var(--faint);
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   nav svg {
