@@ -829,12 +829,99 @@ der gewählten Contour und Cabinet Resonance (Vintage/Modern/Deep). **Kein Scrol
 Ketten-Tab, Effekte-Tab, alle neuen Seiten (mit allen Typen) und „Mehr“ im Browser gemessen ohne Scrollen bei
 412×915, 375×812 und 375×667. Ziehen im Browser mit der Maus geprüft (Booster hinter FX, EQ 1 hinter den Amp). Testplan
 `docs/testplan/phase-2.md`, Version 0.5.0. Im Browser mit dem Mock durchgespielt; am Amp folgt der Test mit dem
-Release v0.5.0.
+Release v0.5.0. Gemergt als #29, Release v0.5.0 am 17.11.2026. Der Testplan `docs/testplan/phase-2.md` am Amp
+(Zuhören, Ziehen mit dem Finger) steht noch aus.
 
 ### Phase 3 – Steuerung und System
-- Schema-Probe für Assigns zuerst (siehe 4.4).
-- Assigns, Expression-Pedal, Fußschalter (GA-FC), System- und USB-Einstellungen.
-- Tuner nur, falls ein Mitschnitt zeigt, dass der Amp Tuner-Daten liefert (in BTS gibt es dafür keinen Hinweis).
+
+*Abgestimmt 17.11.2026:* Umfang vollständig wie unten (alle Assigns, ganzes SYSTEM ohne Power Control; Line Out
+wird im Proberaum benutzt, und eine spätere Veröffentlichung soll auch anderen alles bieten), drei PRs.
+Ziel: Alles, was BTS beim **KATANA-100** unter Assign und System
+zeigt, lässt sich in der App lesen und einstellen. Vorhanden: ein **GA-FC** (Antwort 17.11.2026), also bekommen
+die GA-FC-Assigns volles Gewicht; Expression-Pedal und Fußschalter am Amp kommen der Vollständigkeit halber mit,
+weil sie dieselbe Vorlage nutzen.
+
+**Was es beim KATANA-100 gibt** (lokale BTS-Analyse, `model_info.js` / `model_controller.js`, Modellcode `06`):
+GA-FC ja, Global EQ („Tone Shape“) ja; **nein** für Solo-Delay (schon bekannt), Bloom und **Power Control**
+(`SYSTEM` Block `10 00 20 00`, BTS legt beim 100 eine Maske darüber). Die GA-FC-Expression-Blöcke gibt es im
+Patch je zweimal (`(1)` und `(2)`); BTS für Gen 3 benutzt nur `(1)`, `(2)` nur im Code für den MkII. Vermutung:
+`(2)` ist wie das Solo-Delay nur gemeinsames Format, wird geprüft und sonst wie dort nur roh mitgeführt.
+
+**Umfang** (Lagen aus der BTS-Analyse, alles noch [D]):
+
+| Bereich | Blöcke | Inhalt |
+|---|---|---|
+| Regler-Assigns | `5C 00` (34) | welchen Parameter der Effekt-Regler am Amp steuert, ein Feld je Effekttyp: Booster, Delay, Reverb und die 31 Mod/FX-Typen (für Mod und FX gilt das Feld des aktiven Typs) |
+| Expression-Pedal am Amp | `5E 00` (Funktion 0–9), `60 00` (Ziel je Typ, 34), `62 00`/`64 00` (Min/Max je Typ, 49) | Funktion und, wenn die Funktion ein Effekt ist, Ziel und Bereich |
+| Fußschalter am Amp | `66 00` (Spitze, Ring je 0–2) | |
+| GA-FC | `68 00` (FS1–3 je 0–9), `6C 00`, `70 00`, `74 00`, `78 00` (EXP 1: Funktion, Ziel, Min, Max), ebenso EXP 2 (`7C 00` …) und EXP 3 (`01 0C 00` …) | Instanz `(1)` |
+| SYSTEM | `10 00 00 00` … `10 00 28 00`, 21 Blöcke, 131 Bytes | Stereo Expand, USB (Eingang, Ausgang, Mix, Loopback, USB 2), Global EQ (Schalter, Auswahl 1–3, je Speicher Position/Typ, PEQ, GEQ), Line Out (Auswahl, Air Feel, Mic-Typ/-Abstand/-Position, Ambience je Line Out 1/2), Power Amp In (HPF), GA-FC-Systemfunktionen (SW1–4, Panel), MIDI (Kanal, CC-Nummern, Programmwechsel); **ohne** Power Control |
+
+Zusammen rund **400 Patch-Bytes** und **130 SYSTEM-Bytes**. Tuner **entfällt** (Q9: der Amp hat keinen, soweit
+bekannt). Firmware-Version (Q7) bleibt offen, ist aber kein Teil von Phase 3.
+
+**Schema-Probe zuerst (4.4):** Das Ziel ist kein freier Wert, sondern je Effekttyp ein eigenes Feld mit fester
+Lage; welches Feld gilt, hängt vom Effekt ab (Booster/Delay/Reverb fest, Mod/FX nach aktivem Typ). Min/Max
+liegen je Typ an fester Stelle mit fester Größe (Delay und Reverb `u4x4`, sonst `u7`), aber **Bereich und Anzeige
+hängen vom gewählten Ziel ab** (Delay: Zeit 0–2000 ms oder Feedback 0–100 im selben Feld). Vorschlag: im Schema
+ein Feld `rangeBy` (Schlüssel des Ziel-Parameters → Bereich und Anzeige je Zielwert), alles andere geht mit dem
+Vorhandenen (`visibleFor`, `showIf`). Versuch: Schema plus Liste für **ein** Beispiel (Delay am Expression-Pedal:
+Ziel, Min, Max) mit Tests, dazu ein kleiner Lauf am Amp (Ziel umstellen, Min/Max schreiben, auch einen Wert
+außerhalb des Zielbereichs: begrenzt der Amp, oder speichert er roh?). Ergebnis besprechen, dann erst die Liste.
+
+**SYSTEM ist anders als der Patch:** gilt für alle Kanäle, steht in keinem Speicherplatz, „ungespeichert“ gibt es
+nicht. Offen und vor dem ersten Schreiben zu klären: Bleibt ein DT1 auf SYSTEM nach dem Aus- und Einschalten
+erhalten, oder braucht es einen eigenen Speicherbefehl? Meldet der Amp SYSTEM-Änderungen am Gerät (Editor-Modus)?
+Meldet er GA-FC-Tritte und die Pedalstellung (wie die Regler in Q3)? Das Prüfwerkzeug lernt `10 00 …`; jeder
+Schreibtest auf SYSTEM wird vorher mit dir abgestimmt (Parameter, Wert, Rückweg), nach einem Komplett-Backup.
+
+**Bedienung** (Vorschlag, wird mit klickbaren Entwürfen abgestimmt, kein Scrollen wie bisher):
+- **Assigns** gehören zum Patch: Wo sie hingehören, entscheiden die Entwürfe, z. B. **A** ein Abschnitt
+  „Steuerung“ auf jeder Effekt-Seite (Regler am Amp, EXP, GA-FC für diesen Effekt), **B** ein eigener Bereich
+  „Assign“ mit einer Zeile je Bedienelement (Amp-Regler, EXP, FS, GA-FC FS1–3, EXP 1–3), **C** eine Kombination
+  (Übersicht im eigenen Bereich, Ziel und Bereich auf der Effekt-Seite).
+- **System** ist selten nötig: kein Haupt-Tab, sondern über das Menü erreichbar, mit deutlichem Hinweis „gilt für
+  alle Kanäle“, Seiten im Stil der Effekt-Seiten (Global EQ wie EQ 1/2).
+- Probe-Tab bleibt schlank (nichts Neues dort).
+
+*Fertig, wenn:* alle Parameter der Tabelle in der Liste stehen und am Amp mit `-ParamTest` geprüft sind ([C]),
+jeder Wert in den Mitschnitten in den Bereichen liegt, die Liste lokal mit der Adressliste von BTS übereinstimmt,
+das SYSTEM-Layout in `protocol-notes.md` steht, ein in der App eingestellter Assign in BTS gleich erscheint
+(Stichprobe über `.tsl`), der GA-FC am Amp tut, was die App eingestellt hat (Fußschalter und EXP), eine
+SYSTEM-Änderung Aus/Ein übersteht (oder bewusst nicht, dann steht das in der App) und der Testplan
+`docs/testplan/phase-3.md` am Amp durch ist.
+
+*Pull Requests (Vorschlag):* drei, wie in Phase 2.
+1. **Assigns: Schema-Probe, Liste, Adressprüfung.** Release-Vermerk v0.5.0 in PLAN. Schema-Probe mit Halt zur
+   Besprechung, dann alle Assigns (Regler, EXP, FS, GA-FC) mit Anzeigetabellen (Funktionen, Ziele je Typ),
+   Tests gegen Mitschnitte, Abgleich mit BTS, Mock; Lauf am Amp (nur aktueller Patch). Ohne neue Oberfläche.
+2. **Assigns: Oberfläche.** Entwürfe A/B/C klickbar, entscheiden, umsetzen; „Alles zurück“ und Speichern
+   erfassen die Assign-Blöcke ohnehin (ganze Blöcke).
+3. **System und Abschluss.** SYSTEM-Layout zuordnen und in `protocol-notes.md`, Liste, Prüfwerkzeug für
+   `10 00 …`, State für SYSTEM (lesen beim Verbinden, schreiben, Meldungen), abgestimmte Schreibtests am Amp,
+   Entwürfe und System-Seiten, Testplan `docs/testplan/phase-3.md`, Version 0.6.0, Release nach deinem Ja.
+   Falls PR 3 zu groß wird: SYSTEM-Modell und Prüfung als eigener PR vor der Oberfläche.
+
+*Stand Phase 3:* PR 1 (17.11.2026, Branch `claude/phase-3-assigns`): **Schema-Probe** mit Delay am
+Expression-Pedal, am Amp geprüft: Der Amp speichert Min/Max roh ohne Prüfung gegen den Zielbereich und lässt
+sie beim Zielwechsel stehen. Daraus im Schema `rangeBy` (Bereich und Anzeige folgen dem Ziel) und
+`effectiveRange()`; die App begrenzt beim Schreiben auf den Zielbereich und setzt Min/Max bei einem neuen Ziel
+auf dessen vollen Bereich (wie BTS). **Liste** `src/model/assigns.ts`: 451 Parameter (Regler am Amp je
+Effekttyp, EXP-Pedal am Amp, GA-FC EXP 1–3 mit Funktion, Ziel, Min, Max je Effekt; Fußschalter Spitze/Ring;
+GA-FC FS1–3), Ziele verweisen auf unsere Effekt-Parameter. Booster-, Delay- und Reverb-Parameter und die
+Typnamen liegen jetzt in `src/model/effects.ts` (kein Kreisimport). **Prüfungen:** jeder Wert in allen
+Mitschnitten in den Bereichen; lokal mit der Adressliste von BTS verglichen (451 von 451 gleich). Die eigene
+Assign-Seite von BTS rechnet die Min/Max-Lagen ab Humanizer falsch; die Liste folgt der Adressliste, die zu den
+Werkswerten passt. **Lauf am Amp** (17.11.2026, Claude am PC, nach Komplett-Backup aus der App, nur aktueller
+Patch, kein `PATCH_WRITE`): alle 451 Adressen einwandfrei, [C]. Nicht in der Liste: die GA-FC-Blöcke (2)
+(BTS nutzt sie beim Gen 3 nicht, Werkswerte weichen von (1) ab; offen, roh in Backups). Offen für den Testplan:
+Wirkung der Expression-Assigns: ohne Pedal nicht prüfbar (der GA-FC hat zwei Pedalbuchsen, angeschlossen ist
+keins), u. a. ein Max über dem Zielbereich (Werkswert 127 bei „Preset“). **GA-FC am Amp mitgeschnitten**
+(17.11.2026, nur gelesen, protocol-notes 2.8): 1–4 und PANEL wählen Kanäle, EFFECT kurz schaltet in den
+Effekt-Modus (1–4 und PANEL schalten Booster, Mod, FX, Delay, Reverb im aktuellen Patch), EFFECT lang in den
+Funktions-Modus, dessen Funktionen aus SYSTEM kommen (`10 00 22 00`, hier alle SOLO ON/OFF), PANEL lang wechselt
+die Bank. Folge: Für den GA-FC zählen beim Besitzer vor allem die **System**-Funktionen (PR 3); was die
+Patch-Funktionen GA-FC FS1–3 beim normalen GA-FC tun, ist offen.
 
 ### Phase 4 – Bibliothek und Austausch
 - Patch-Bibliothek auf dem Gerät (Dateien in einem sichtbaren Ordner, siehe 4.6), Ordner/Suche.

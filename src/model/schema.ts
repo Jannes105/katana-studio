@@ -65,7 +65,37 @@ export interface ParamDef {
   readonly alsoChanges?: readonly Address[];
   /** Raw steps per drag step of a knob (e.g. 5 for the delay time in ms); default 1. */
   readonly dragStep?: number;
+  /**
+   * Range and display that follow another parameter (assign min/max, PLAN 4.4): the sibling `key` picks the
+   * target, `ranges[target]` is the range and display of that target. min/max above stay the raw range of the
+   * field itself (the amp keeps e.g. 127 there although the target ends at 100). Missing entry = own range.
+   */
+  readonly rangeBy?: { readonly key: string; readonly ranges: readonly (RangeSpec | undefined)[] };
   readonly status: Status;
+}
+
+/** A raw range with its display, e.g. the range of an assign target. */
+export interface RangeSpec {
+  readonly min: number;
+  readonly max: number;
+  readonly display?: Display;
+}
+
+/** Range and display of a parameter, for use as an assign target. */
+export function rangeOf(def: ParamDef): RangeSpec {
+  return def.display ? { min: def.min, max: def.max, display: def.display } : { min: def.min, max: def.max };
+}
+
+/**
+ * The range and display that apply now: the target's for a parameter with rangeBy (when the target is known
+ * and listed), otherwise its own. Writes are clamped to this range; a raw value beyond it (127 for "up to the
+ * end") is shown at the nearer end.
+ */
+export function effectiveRange(def: ParamDef, valueOf: (key: string) => number | undefined): RangeSpec {
+  const by = def.rangeBy;
+  const target = by ? valueOf(by.key) : undefined;
+  const spec = by && target !== undefined ? by.ranges[target] : undefined;
+  return spec ?? rangeOf(def);
 }
 
 /**
