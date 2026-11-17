@@ -12,6 +12,8 @@
   import EffectsView from './EffectsView.svelte';
   import ProbeView from './ProbeView.svelte';
   import Sheet from './Sheet.svelte';
+  import HelpSheet from './help/HelpSheet.svelte';
+  import { closeHelp, helpState } from './help/state.svelte';
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
   import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
@@ -439,6 +441,10 @@
     </button>
   </nav>
 </div>
+
+{#if helpState.target}
+  <HelpSheet target={helpState.target} {lang} onClose={closeHelp} />
+{/if}
 
 {#if saveFor !== null}
   {@const slot = slotName(saveFor)}

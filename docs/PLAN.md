@@ -956,9 +956,70 @@ Regler), je mit Kurzinfo und dem Hinweis „gilt für alle Kanäle · der Amp sp
 (`src/ui/system-pages.ts`, getestet). Der Bereich **„Schalter“** zeigt oben den GA-FC-Funktions-Modus. Regler
 richten sich nach der Bildschirmhöhe (70–100 px). **Kein Scrollen:** alle 14 Ansichten gemessen bei 412×915,
 375×812 und 375×667. Im Browser mit dem Mock durchgespielt (Global EQ an, Speicher wechseln, Regler, GA-FC SW3).
-Testplan `docs/testplan/phase-3.md`, Version 0.6.0.
+Testplan `docs/testplan/phase-3.md`, Version 0.6.0. Gemergt als #32, **Release v0.6.0 am 17.11.2026**. In der
+App scheint alles zu funktionieren; der Testplan `docs/testplan/phase-3.md` am Amp steht noch aus (wie der von
+Phase 2).
+
+### Phase 3a – Erklärungen *(Entscheidung 17.11.2026)*
+
+Ziel: Die App erklärt jeden Parameter und jeden Effekttyp, damit man lernt, was er macht und wie man gute Sounds
+baut. Die Oberfläche bleibt dabei sauber, nichts scrollt.
+
+**Bedienung (entschieden nach klickbaren Entwürfen A/B/C, design.html gelöscht, nie committet): A, nur lange
+drücken.** Lange drücken (450 ms, Finger bewegt sich weniger als 6 px) auf einen Regler, eine Auswahl, einen
+Amp- oder Effekttyp öffnet unten ein Fenster mit der Erklärung. Es gibt keinen Lernmodus und keinen Schalter, und
+die Oberfläche zeigt nichts zusätzlich außer dem Hinweis in der Hinweiszeile. Damit nichts versehentlich geändert
+wird: Ab 6 px Bewegung wird gezogen statt erklärt; hat das lange Drücken ausgelöst, ist die Geste verbraucht
+(weiteres Ziehen ändert nichts, Loslassen zählt nicht als Tippen, wählt also nichts aus). Doppeltipp (zurücksetzen)
+bleibt unverändert.
+
+**Inhalt eines Eintrags** (fester Aufbau, Längen per Test begrenzt, damit das Fenster bei 375×667 nicht scrollt):
+Kurzsatz (bis 70 Zeichen), *Was* (bis 170), *Wann* (bis 130), optional *Start* (typischer Startwert, bis 50) und
+*Tipp* (Klang-Tipp, bis 150). Typ-Beschreibungen gehören dazu (Klang, wofür, Startwerte). Klang-Tipps stehen beim
+passenden Parameter (z. B. „matschig bei viel Gain?“ bei Gain), keine eigene Tipp-Seite. Texte selbst geschrieben,
+Englisch und Deutsch, nichts aus BOSS-Anleitungen.
+
+**Ablage:** `src/ui/help/en.ts` und `src/ui/help/de.ts` (je Sprache eine Tabelle), Suche in `src/ui/help/help.ts`.
+Schlüssel = Parameterschlüssel ohne Variation (`delay.1.time` → `delay.time`); fehlt er, wird von vorn gekürzt
+(`twah.effectLevel` → `effectLevel`, `solo.eq.lowCut` → `eq.lowCut` → `lowCut`). So stehen wiederkehrende
+Parameter (Effect Level, Direct Mix, Rate, Depth …) einmal da, Ausnahmen je Typ gezielt. Typen: `type.<effekt>.<Name>`.
+
+*Fertig, wenn:* jeder angezeigte Parameter und jeder Typ einen Text in EN und DE hat (Test), gleiche Schlüssel in
+beiden Sprachen und die Längen eingehalten sind (Test), lange drücken nachweislich nichts ändert (Test und Handy),
+die Fenster in 412×915, 375×812 und 375×667 ohne Scrollen gemessen sind und der Testplan
+`docs/testplan/phase-3a.md` am Handy durch ist.
+
+*Pull Requests:* zwei.
+1. **Mechanismus und Grundlagen.** Release-Vermerk v0.6.0 und Pause von Phase 4 in PLAN. Lange drücken in
+   `drag.ts`/`Knob.svelte` und bei Auswahlen und Typen, Erklärungsfenster, Texte für Amp (Regler, Typen,
+   Variation, Resonance), Booster, Delay, Delay 2, Reverb, NS, EQ, Contour und alle Typen (Amp, Booster, 31 Mod/FX,
+   Delay, Reverb), Tests.
+2. **Der Rest und Abschluss.** Mod/FX-Regler aller Typen (gemeinsame Texte plus Ausnahmen), Pedal FX, Solo,
+   Steuerung, System; Abdeckungstest über alle angezeigten Parameter; Testplan `docs/testplan/phase-3a.md`,
+   Version 0.7.0, Release nach deinem Ja.
+
+*Testplan am Handy (Kern):* auf jeder Art Bedienelement lange drücken (Regler, Auswahl, Typ, Amp-Typ-LED,
+Steuerung, System) → Fenster kommt, Wert bleibt; lange drücken und dann ziehen → nichts ändert sich; kurz tippen,
+Doppeltipp und Ziehen wie bisher; Sprache umschalten → Texte wechseln; Fenster auf dem Handy ohne Scrollen.
+
+*Stand Phase 3a:* PR 1 (17.11.2026, Branch `claude/phase-3a-help`): **Mechanismus** in `drag.ts` (`onLongPress`,
+Regler) und `src/ui/help/press.ts` (Aktion `longPress` für Knöpfe, schluckt den Klick danach, Bewegung oder
+Scrollen bricht ab); Fenster `src/ui/help/HelpSheet.svelte` über allen anderen Fenstern, kurzer Vibrationsimpuls.
+Angebunden: Probe-Tab (Amp-Regler, Amp-Typen, Variation, NS, Contour, „Mehr“ mit NS-Reglern, Contour-Typ,
+Resonance, Power Amp, Cabinet Resonance) und Effekte-Tab (Regler, Auswahlen, Schalter, Variationen, Typ-Knopf,
+Typ-Liste, Zeilen der Effekt-Liste erklären den aktiven Typ); der Kontext über dem Titel nennt Effekt und Typ.
+Hinweiszeile im Probe-Tab nennt „Halten: Erklärung“. **Texte** EN und DE für Amp, NS, Contour, Booster, Delay,
+Delay 2, Reverb, EQ 1/2 und alle 77 Typen (Booster- und Mod/FX-Typen von einem Subagenten vorgeschrieben, von
+Claude geprüft und korrigiert: Startwerte mit den echten Reglernamen, keine fremden Marken). Steuerung, System,
+Kette und die Mod/FX-Regler kommen mit PR 2 (dort zeigt langes Drücken noch nichts bzw. „noch keine
+Erklärung“). **Tests:** gleiche Schlüssel, Längen, Suche mit Rückfall, Abdeckung der Grundlagen und aller Typen,
+Gesten (lange drücken ändert nichts, Ziehen verhindert die Erklärung, Doppeltipp bleibt, Klick wird geschluckt,
+Scrollen bricht ab). **Kein Scrollen:** die längsten Texte (EN und DE) im Fenster bei 375×667 gemessen, Probe-Tab
+bei 412×915, 375×812 und 375×667. Im Browser mit dem Mock durchgespielt; am Handy noch nicht.
 
 ### Phase 4 – Bibliothek und Austausch
+*Pausiert (17.11.2026):* Bibliothek, Komplett-Wiederherstellen und .tsl-Import macht der Besitzer eher am PC (dort
+gibt es BTS). Wird wieder aufgenommen, wenn es am Handy gebraucht wird.
 - Patch-Bibliothek auf dem Gerät (Dateien in einem sichtbaren Ordner, siehe 4.6), Ordner/Suche.
 - **Komplett-Wiederherstellen** aus einem Backup (automatisches Backup davor, Zurücklesen danach).
 - **.tsl-Import/-Export** für Gen-3-Dateien (Tone Exchange). Dateien vom Katana MkII bleiben außen vor.

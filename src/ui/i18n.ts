@@ -45,7 +45,7 @@ const en = {
   'probe.freqShiftOff': 'Freq Shift: contour off',
   'probe.contourType': 'Type',
   'probe.powerAmp': 'Power amp variation',
-  'probe.hint': 'Drag a knob up or down. Double tap: back to the saved value.',
+  'probe.hint': 'Drag: change · Double tap: saved value · Hold: explain',
 
   'fx.title': 'Effects',
   'fx.note':
@@ -79,6 +79,11 @@ const en = {
   'colour.2': 'Yellow',
 
   'sheet.close': 'Close',
+  'help.what': 'What',
+  'help.when': 'When',
+  'help.start': 'Start',
+  'help.tip': 'Tip',
+  'help.none': 'No explanation for this yet.',
   'sheet.status': 'Connection',
   'fact.status': 'Status',
   'fact.device': 'Device',
@@ -244,7 +249,7 @@ const de: Record<TextKey, string> = {
   'probe.freqShiftOff': 'Freq Shift: Contour aus',
   'probe.contourType': 'Typ',
   'probe.powerAmp': 'Endstufen-Variation',
-  'probe.hint': 'Regler hoch oder runter ziehen. Doppeltipp: zurück auf den gespeicherten Wert.',
+  'probe.hint': 'Ziehen: ändern · Doppeltipp: gespeicherter Wert · Halten: Erklärung',
 
   'fx.title': 'Effekte',
   'fx.note':
@@ -278,6 +283,11 @@ const de: Record<TextKey, string> = {
   'colour.2': 'Gelb',
 
   'sheet.close': 'Schließen',
+  'help.what': 'Was',
+  'help.when': 'Wann',
+  'help.start': 'Start',
+  'help.tip': 'Tipp',
+  'help.none': 'Dafür gibt es noch keine Erklärung.',
   'sheet.status': 'Verbindung',
   'fact.status': 'Status',
   'fact.device': 'Gerät',
