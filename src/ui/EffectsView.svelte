@@ -3,30 +3,58 @@
   // opens the effect page with all three variations. Everything here writes: on/off, active variation, type, and
   // the knobs of the active variation's type, on pages of at most six knobs (Phase 2, direction A). The delay
   // page has a second tab for Delay 2 (variation = reverb colour); layer mode sits on the reverb page.
-  import { DELAY2, DELAY2_SWITCH, NS_RELEASE, NS_SWITCH, NS_THRESHOLD, effectType } from '../model/params';
+  import type { ChainBlock, ChainSettings } from '../model/chain';
+  import {
+    AMP_TYPE,
+    DELAY2,
+    DELAY2_SWITCH,
+    NS_RELEASE,
+    NS_SWITCH,
+    NS_THRESHOLD,
+    effectType,
+  } from '../model/params';
   import { readRaw } from '../model/patch';
-  import { MASTER_KEY } from '../model/sections';
+  import {
+    CHAIN_VARIANT,
+    MASTER_KEY,
+    SECTIONS,
+    sectionByKey,
+    type Section,
+    type SectionKey,
+  } from '../model/sections';
+  import ChainDiagram, { type BlockInfo } from './ChainDiagram.svelte';
   import { instanceParam, type ParamDef, type VariantGroup } from '../model/schema';
   import { effectLayout, type EffectPage } from './pages';
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
   import { t, type Language, type TextKey } from './i18n';
-  import { dimmed, editable, effectRows, paramView, type EffectRow } from './view';
+  import {
+    chainSettings,
+    dimmed,
+    editable,
+    effectRows,
+    paramView,
+    type ChainItem,
+    type EffectRow,
+  } from './view';
 
   let {
     s,
     lang,
     connection,
     onUndoable,
+    view = 'effects',
   }: {
     s: ConnectionState;
     lang: Language;
     connection: AmpConnection;
     /** A reset happened: the app offers "Undo" for a moment (PLAN 4.5 rule 7). */
     onUndoable: (text: string, result: WriteResult) => void;
+    /** Effects tab (the five effects and the noise suppressor) or chain tab (every block in signal order). */
+    view?: 'effects' | 'chain';
   } = $props();
-  /** Key of the effect whose page is open; 'ns' for the noise suppressor. */
+  /** Key of the page that is open: an effect, a section (EQ, pedal FX …), 'chain' or 'ns'. */
   let open = $state<string | null>(null);
   /** The type list of this group and variation is open. */
   let choosingType = $state<{ group: VariantGroup; colour: number } | null>(null);
@@ -44,6 +72,112 @@
 
   const rows = $derived(effectRows(s));
   const row = $derived(rows.find((r) => r.key === open));
+  const sec = $derived(SECTIONS.find((x) => x.key === open));
+  /** Names of the chain blocks (as on the amp; not translated). */
+  const BLOCK_LABEL: Record<ChainBlock, string> = {
+    pedalFx: 'Pedal FX',
+    booster: 'Booster',
+    mod: 'Mod',
+    fx: 'FX',
+    delay: 'Delay',
+    eq1: 'EQ 1',
+    eq2: 'EQ 2',
+    amp: 'Amp',
+    sendReturn: 'Send/Return',
+    footVolume: 'FV',
+    delay2: 'Delay 2',
+    reverb: 'Reverb',
+  };
+  const chainIsChanged = $derived(
+    paramView(s, CHAIN_VARIANT).changed ||
+      SECTIONS.some((x) => x.position && paramView(s, x.position).changed),
+  );
+  /** What the chain tab shows for a block. */
+  function blockInfo(b: ChainBlock): BlockInfo {
+    const r = rows.find((x) => x.key === b);
+    if (r)
+      return {
+        label: r.label,
+        sub: r.colour === undefined ? '' : `${colourName(r.colour)} · ${r.typeNames[r.colour] ?? ''}`,
+        on: r.on,
+        hasSwitch: true,
+        colour: colourCss(r.colour),
+        changed: r.changed,
+        hasPage: true,
+      };
+    const x = SECTIONS.find((y) => y.key === b);
+    if (x) {
+      const on = valueOf(x.switch);
+      return {
+        label: x.label,
+        sub: sectionSub(x),
+        on: on === undefined ? undefined : on === 1,
+        hasSwitch: true,
+        colour: 'var(--accent)',
+        changed: sectionChanged(x),
+        hasPage: true,
+      };
+    }
+    if (b === 'delay2') {
+      const reverb = rows.find((y) => y.key === 'reverb');
+      const d2 = paramView(s, DELAY2_SWITCH);
+      const typeDef = reverb?.colour === undefined ? undefined : effectType(DELAY2, reverb.colour);
+      const type = valueOf(typeDef);
+      return {
+        label: DELAY2.label,
+        sub: type === undefined ? '' : (DELAY2.typeNames[type] ?? ''),
+        on: d2.value === undefined ? undefined : d2.value === 1,
+        hasSwitch: true,
+        colour: colourCss(reverb?.colour),
+        changed: d2.changed || (typeDef !== undefined && paramView(s, typeDef).changed),
+        hasPage: true,
+      };
+    }
+    const at = valueOf(AMP_TYPE);
+    return {
+      label: BLOCK_LABEL[b],
+      sub: b === 'amp' && at !== undefined ? (AMP_TYPE.display?.table?.[at] ?? '') : '',
+      on: undefined,
+      hasSwitch: false,
+      colour: 'var(--accent)',
+      changed: false,
+      hasPage: false,
+    };
+  }
+  /** Writes the settings of a drag or step: the chain variant or one position (only what changed). */
+  function applyChain(next: ChainSettings): void {
+    const now = chainSettings(s);
+    if (next.variant !== now.variant) set(CHAIN_VARIANT, next.variant);
+    for (const key of ['pedalFx', 'eq1', 'eq2', 'sendReturn'] as const) {
+      const pos = sectionByKey(key).position;
+      if (pos && next[key] !== now[key]) set(pos, next[key]);
+    }
+  }
+  function toggleBlock(b: ChainBlock): void {
+    const r = rows.find((x) => x.key === b);
+    const def = r
+      ? r.group.switch
+      : b === 'delay2'
+        ? DELAY2_SWITCH
+        : SECTIONS.find((x) => x.key === b)?.switch;
+    if (!def) return;
+    set(def, valueOf(def) === 1 ? 0 : 1);
+  }
+  const valueOf = (def: ParamDef | undefined): number | undefined =>
+    def ? paramView(s, def).value : undefined;
+  /** A short summary for a section in the list. */
+  function sectionSub(x: Section): string {
+    const name = (def: ParamDef | undefined) => {
+      const v = valueOf(def);
+      return v === undefined || !def ? '–' : (def.display?.table?.[v] ?? String(v));
+    };
+    if (x.type) return name(x.type);
+    if (x.key === 'sendReturn')
+      return `${name(x.position)} · ${name(x.params.find((p) => p.key === 'sendReturn.mode'))}`;
+    const level = x.params.find((p) => p.key === 'solo.level');
+    return `${level?.label ?? ''} ${valueOf(level) ?? '–'}`;
+  }
+  const sectionChanged = (x: Section) => [x.switch, ...x.params].some((p) => paramView(s, p).changed);
   const ns = $derived(paramView(s, NS_SWITCH));
   const nsChanged = $derived(
     ns.changed || paramView(s, NS_THRESHOLD).changed || paramView(s, NS_RELEASE).changed,
@@ -52,6 +186,7 @@
 
   /** Back to page 1 whenever the effect, its variation or its type changes. */
   const pageKey = $derived.by(() => {
+    if (sec) return `${open}/${valueOf(sec.type) ?? ''}`;
     if (!row || row.colour === undefined) return `${open}`;
     return `${open}/${delayTab}/${row.colour}/${row.types[row.colour]}`;
   });
@@ -73,6 +208,21 @@
       head: l.head.map(abs),
       pages: l.pages.map((p) => ({ ...p, choices: p.choices.map(abs), knobs: p.knobs.map(abs) })),
     };
+  }
+  /** The layout of a section (patch parameters; visibleFor follows its type). */
+  function sectionLayout(x: Section) {
+    const byKey = (key: string) => valueOf(x.params.find((p) => p.key === key));
+    return effectLayout(x.params, valueOf(x.type), byKey);
+  }
+  function openItem(it: ChainItem | 'footVolume'): void {
+    if (it === 'amp' || it === 'footVolume') return;
+    if (it === 'delay2') {
+      delayTab = 'delay2';
+      open = 'delay';
+      return;
+    }
+    if (it === 'delay') delayTab = 'delay';
+    open = it;
   }
   function pageTitle(p: EffectPage, many: boolean): string {
     const name = p.group ?? (many ? t(lang, 'fx.mainPage') : t(lang, 'fx.knobs'));
@@ -153,7 +303,7 @@
   />
 {/snippet}
 
-{#snippet choice(def: ParamDef)}
+{#snippet choice(def: ParamDef, label: string = def.label)}
   {@const v = paramView(s, def)}
   {@const names = def.display?.table ?? []}
   {#if names.length > 4}
@@ -164,7 +314,7 @@
       disabled={!editable(s, def)}
       onclick={() => (choosingValue = def)}
     >
-      <span class="tlabel">{def.label}</span>
+      <span class="tlabel">{label}</span>
       <span class="pname">{v.value === undefined ? '–' : (names[v.value] ?? v.value)}</span>
       <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
     </button>
@@ -181,7 +331,7 @@
           >
         {/each}
       </div>
-      <span class="clabel">{def.label}</span>
+      <span class="clabel">{label}</span>
     </div>
   {/if}
 {/snippet}
@@ -217,7 +367,12 @@
 
 {#snippet variantBody(g: VariantGroup, colour: number | undefined, type: number | undefined)}
   {#if colour !== undefined}
-    {@const l = layoutOf(g, colour, type)}
+    {@render layoutView(layoutOf(g, colour, type))}
+  {/if}
+{/snippet}
+
+{#snippet layoutView(l: { head: readonly ParamDef[]; pages: readonly EffectPage[] })}
+  {#if true}
     {@const many = l.pages.length > 1}
     {@const current = l.pages[Math.min(page, l.pages.length - 1)]}
     <div class="vb" style:--rows={l.head.length + (current?.choices.length ?? 0)}>
@@ -278,6 +433,26 @@
         </div>
       {/if}
     </div>
+  {/if}
+{/snippet}
+
+{#snippet sectionRow(key: SectionKey)}
+  {@const x = SECTIONS.find((y) => y.key === key)}
+  {#if x}
+    {@const on = valueOf(x.switch)}
+    <li class:on={on === 1} style:--c="var(--accent)">
+      <button class="open" onclick={() => (open = x.key)}>
+        <span class="led"></span>
+        <span class="text">
+          <span class="name"
+            >{x.label}{#if sectionChanged(x)}<span class="mark"></span>{/if}</span
+          >
+          <span class="sub">{sectionSub(x)}</span>
+        </span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
+      </button>
+      {@render toggle(on === undefined ? undefined : on === 1, x.label, false, x.switch)}
+    </li>
   {/if}
 {/snippet}
 
@@ -410,6 +585,13 @@
         </div>
       </Sheet>
     {/if}
+  {:else if sec}
+    {@const x: Section = sec}
+    {@const on = valueOf(x.switch)}
+    {@render back(x.label, on === undefined ? undefined : on === 1, x.switch)}
+    <div class="fx">
+      {@render layoutView(sectionLayout(x))}
+    </div>
   {:else if open === 'ns'}
     {@render back(NS_SWITCH.label, ns.value === undefined ? undefined : ns.value === 1, NS_SWITCH)}
     <div class="sect"><span class="title">{NS_SWITCH.label}</span><i></i></div>
@@ -419,51 +601,66 @@
     </div>
     <p class="note">{t(lang, 'fx.nsNote')}</p>
   {:else}
-    <div class="sect"><span class="title">{t(lang, 'fx.title')}</span><i></i></div>
-    <ul class="list">
-      {#each rows as r (r.key)}
-        <li class:on={r.on} style:--c={colourCss(r.colour)}>
-          <button class="open" onclick={() => (open = r.key)}>
+    {#if view === 'chain'}
+      <ChainDiagram
+        settings={chainSettings(s)}
+        info={blockInfo}
+        {lang}
+        enabled={editable(s, CHAIN_VARIANT)}
+        chainChanged={chainIsChanged}
+        onapply={applyChain}
+        onopen={(b) => openItem(b)}
+        ontoggle={toggleBlock}
+      >
+        <ul class="list" style:--n={12}>{@render sectionRow('solo')}</ul>
+      </ChainDiagram>
+    {:else}
+      <ul class="list" style:--n={7}>
+        {#each rows as r (r.key)}
+          <li class:on={r.on} style:--c={colourCss(r.colour)}>
+            <button class="open" onclick={() => openItem(r.key)}>
+              <span class="led"></span>
+              <span class="text">
+                <span class="name"
+                  >{r.label}{#if r.changed}<span class="mark"></span>{/if}</span
+                >
+                <span class="sub">
+                  {#if r.colour !== undefined}
+                    <span class="swatch">{colourName(r.colour)}</span>{r.typeNames[r.colour] ?? ''}
+                  {/if}
+                </span>
+              </span>
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
+            </button>
+            {@render toggle(r.on, r.label, false, r.group.switch)}
+          </li>
+        {/each}
+        <li class="gap" aria-hidden="true"></li>
+        <li class:on={ns.value === 1} style:--c="var(--accent)">
+          <button class="open" onclick={() => (open = 'ns')}>
             <span class="led"></span>
             <span class="text">
               <span class="name"
-                >{r.label}{#if r.changed}<span class="mark"></span>{/if}</span
+                >{NS_SWITCH.label}{#if nsChanged}<span class="mark"></span>{/if}</span
               >
               <span class="sub">
-                {#if r.colour !== undefined}
-                  <span class="swatch">{colourName(r.colour)}</span>{r.typeNames[r.colour] ?? ''}
-                {/if}
+                {NS_THRESHOLD.label}
+                {paramView(s, NS_THRESHOLD).value ?? '–'} · {NS_RELEASE.label}
+                {paramView(s, NS_RELEASE).value ?? '–'}
               </span>
             </span>
             <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
           </button>
-          {@render toggle(r.on, r.label, false, r.group.switch)}
+          {@render toggle(
+            ns.value === undefined ? undefined : ns.value === 1,
+            NS_SWITCH.label,
+            false,
+            NS_SWITCH,
+          )}
         </li>
-      {/each}
-      <li class:on={ns.value === 1} style:--c="var(--accent)">
-        <button class="open" onclick={() => (open = 'ns')}>
-          <span class="led"></span>
-          <span class="text">
-            <span class="name"
-              >{NS_SWITCH.label}{#if nsChanged}<span class="mark"></span>{/if}</span
-            >
-            <span class="sub">
-              {NS_THRESHOLD.label}
-              {paramView(s, NS_THRESHOLD).value ?? '–'} · {NS_RELEASE.label}
-              {paramView(s, NS_RELEASE).value ?? '–'}
-            </span>
-          </span>
-          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
-        </button>
-        {@render toggle(
-          ns.value === undefined ? undefined : ns.value === 1,
-          NS_SWITCH.label,
-          false,
-          NS_SWITCH,
-        )}
-      </li>
-    </ul>
-    <p class="note">{t(lang, 'fx.note')}</p>
+      </ul>
+      <p class="note">{t(lang, 'fx.note')}</p>
+    {/if}
     {#if typeNamesMissing}
       <p class="note">{t(lang, 'fx.typeNamesLater')}</p>
     {/if}
@@ -506,10 +703,10 @@
     background: var(--panel-2);
     overflow: hidden;
   }
-  li + li {
+  .list > li + li {
     border-top: 1px solid var(--line);
   }
-  li {
+  .list > li {
     display: flex;
     align-items: center;
     padding-right: 12px;
@@ -520,7 +717,8 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    min-height: 66px;
+    min-height: 0;
+    align-self: stretch;
     padding: 0 10px 0 16px;
     text-align: left;
     background: none;
@@ -909,6 +1107,14 @@
     color: var(--c, var(--accent));
     font-weight: 700;
   }
+  /* The list fits the height too: rows share what is there (--n rows), between 40 and 60 px. */
+  .list > li {
+    min-height: clamp(40px, calc((100cqh - 40px) / var(--n, 14)), 60px);
+  }
+  .list > li.gap {
+    min-height: 8px;
+    background: var(--bg);
+  }
   /* Small screens: flatter variations (no "Type" line), the type in one line, no Delay 2 hint. */
   @container (max-height: 600px) {
     .fx {
@@ -937,6 +1143,26 @@
     .typebtn .chev {
       grid-column: 3;
       grid-row: 1;
+    }
+    /* The list: name and type in one line, rows down to 32 px. */
+    .list > li {
+      min-height: clamp(32px, calc((100cqh - 48px) / var(--n, 14)), 60px);
+    }
+    .list .text {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .list .name {
+      font-size: 0.95rem;
+    }
+    .list .switch {
+      min-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    .choice {
+      padding: 2px 4px;
     }
   }
   .dim {

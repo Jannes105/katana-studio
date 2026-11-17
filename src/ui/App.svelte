@@ -20,7 +20,7 @@
   import type { LoadResult } from '../state/connection';
   import { readPatchSource, type PatchSource } from '../storage/sources';
 
-  type Page = 'probe' | 'fx' | 'log';
+  type Page = 'probe' | 'fx' | 'chain' | 'log';
 
   /** How long "Undo" stays offered after a reset, revert or restore (PLAN 4.5 rule 7). */
   const UNDO_MS = 6000;
@@ -381,6 +381,8 @@
       <ProbeView {s} {lang} {connection} onUndoable={offerUndo} onSave={openSave} />
     {:else if page === 'fx'}
       <EffectsView {s} {lang} {connection} onUndoable={offerUndo} />
+    {:else if page === 'chain'}
+      <EffectsView {s} {lang} {connection} onUndoable={offerUndo} view="chain" />
     {:else}
       <div class="log"><LogView {app} {lang} /></div>
     {/if}
@@ -410,6 +412,13 @@
         <path d="M8 12h8" />
       </svg>
       {t(lang, 'tab.fx')}
+    </button>
+    <button class:on={page === 'chain'} onclick={() => (page = 'chain')}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2" y="9" width="5" height="6" rx="1.2" /><rect x="9.5" y="9" width="5" height="6" rx="1.2" />
+        <rect x="17" y="9" width="5" height="6" rx="1.2" /><path d="M7 12h2.5M14.5 12h2.5" />
+      </svg>
+      {t(lang, 'tab.chain')}
     </button>
     <button class:on={page === 'log'} onclick={() => (page = 'log')}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9" /></svg>
@@ -729,7 +738,7 @@
   }
   nav {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     background: var(--display);
     padding-bottom: env(safe-area-inset-bottom);
   }
