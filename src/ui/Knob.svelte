@@ -126,7 +126,8 @@
   }
   svg {
     width: 100%;
-    max-width: 100px;
+    /* The rehearsal tab shrinks its knobs to fit the screen height (ProbeView sets --knob-max). */
+    max-width: var(--knob-max, 100px);
     aspect-ratio: 1;
     overflow: visible;
   }

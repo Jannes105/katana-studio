@@ -1,6 +1,6 @@
 {
   "name": "katana-studio",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Editor for the BOSS Katana 100 Gen 3 over USB, as an Android app (unofficial hobby project)",
   "type": "module",

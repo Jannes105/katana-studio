@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Rehearsal tab, direction C (PLAN 5, design round): amp type with variation, the six amp knobs and the noise
-  // suppressor always visible, the rest under "More" in a window from below (no scrolling). Since 1b everything
-  // here writes: knobs by dragging (double tap = stored value, with undo), LEDs by tapping.
+  // Rehearsal tab, direction C (PLAN 5, design round): amp type with variation and the six amp knobs always
+  // visible; below them quick switches (noise suppressor on/off, contour, "More"), the rest in the window "More"
+  // from below: noise suppressor knobs, contour, resonance, power amp (decided 2026-11-17, variant C). No
+  // scrolling. Everything here writes: knobs by dragging (double tap = stored value, with undo), LEDs by tapping.
   import {
     AMP_KNOBS,
     AMP_POWERAMP_VARIATION,
@@ -78,7 +79,9 @@
       : null,
   );
   const moreChanged = $derived(
-    resonance.changed ||
+    paramView(s, NS_THRESHOLD).changed ||
+      paramView(s, NS_RELEASE).changed ||
+      resonance.changed ||
       contour.changed ||
       powerAmp.changed ||
       (freqShift !== null && paramView(s, freqShift).changed),
@@ -137,30 +140,34 @@
     {/each}
   </div>
 
-  <div class="sect">
-    <span class="title">{t(lang, 'probe.ns')}</span>
-    <i></i>
+  <div class="quick">
     <button
-      class="ledlabel"
+      class="chip"
       class:on={nsOn.value === 1}
+      class:changed={nsOn.changed}
       aria-pressed={nsOn.value === 1}
-      aria-label={NS_SWITCH.label}
+      aria-label={t(lang, 'probe.ns')}
       disabled={!editable(s, NS_SWITCH)}
       onclick={() => set(NS_SWITCH, nsOn.value === 1 ? 0 : 1)}
     >
       <span class="led" class:lit={nsOn.value === 1} class:changed={nsOn.changed}></span>
+      {t(lang, 'probe.nsShort')}
       {nsOn.value === 1 ? t(lang, 'fx.on') : t(lang, 'fx.off')}
     </button>
-  </div>
-  <div class="row">
-    {@render knob(NS_THRESHOLD)}
-    {@render knob(NS_RELEASE)}
-    <button class="more" class:changed={moreChanged} aria-haspopup="dialog" onclick={() => (more = true)}>
-      <span class="ring">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
-      </span>
-      <span class="moretitle">{t(lang, 'probe.more')}</span>
-      <span class="moresub">{t(lang, 'probe.moreSub')}</span>
+    <button class="chip" class:changed={contour.changed} aria-haspopup="dialog" onclick={() => (more = true)}>
+      {CONTOUR_SELECT.label}
+      {contour.value === 1 || contour.value === 2 || contour.value === 3
+        ? contour.value
+        : t(lang, 'probe.contourOff')}
+    </button>
+    <button
+      class="chip more"
+      class:changed={moreChanged}
+      aria-haspopup="dialog"
+      onclick={() => (more = true)}
+    >
+      {t(lang, 'probe.more')}
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
     </button>
   </div>
   <div class="actions">
@@ -177,6 +184,25 @@
 {#if more}
   <Sheet title={t(lang, 'probe.more')} closeLabel={t(lang, 'sheet.close')} onClose={() => (more = false)}>
     <div class:dim={dimmed(s)}>
+      <div class="sect">
+        <span class="title">{t(lang, 'probe.ns')}</span>
+        <i></i>
+        <button
+          class="ledlabel"
+          class:on={nsOn.value === 1}
+          aria-pressed={nsOn.value === 1}
+          aria-label={NS_SWITCH.label}
+          disabled={!editable(s, NS_SWITCH)}
+          onclick={() => set(NS_SWITCH, nsOn.value === 1 ? 0 : 1)}
+        >
+          <span class="led" class:lit={nsOn.value === 1} class:changed={nsOn.changed}></span>
+          {nsOn.value === 1 ? t(lang, 'fx.on') : t(lang, 'fx.off')}
+        </button>
+      </div>
+      <div class="row">
+        {@render knob(NS_THRESHOLD)}
+        {@render knob(NS_RELEASE)}
+      </div>
       <div class="sect"><span class="title">{CONTOUR_SELECT.label}</span><i></i></div>
       <div class="selector four" role="radiogroup" aria-label={CONTOUR_SELECT.label}>
         {#each CONTOUR_NAMES as name, i (name)}
@@ -219,8 +245,27 @@
 {/if}
 
 <style>
+  /*
+   * The rehearsal tab never needs scrolling (PLAN 5, design round): it fits into the height of <main>. The two
+   * rows of amp knobs take what is left (up to 112 px); when space is short the hint goes first, then the knobs
+   * get smaller (down to 64 px). --fixed is the height of everything except the two knob circles.
+   */
   .panel {
+    --knob-max: clamp(64px, calc((100cqh - var(--fixed)) / 2), 112px);
+    --fixed: 340px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-height: 100%;
     padding: 0 14px 8px;
+  }
+  @container (max-height: 580px) {
+    .hint {
+      display: none;
+    }
+    .panel {
+      --fixed: 318px;
+    }
   }
   .dim {
     opacity: 0.45;
@@ -336,48 +381,44 @@
     background: var(--panel);
     font-size: 0.85rem;
   }
-  .more {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 2px;
-    padding: 2px 0 8px;
-    background: none;
-    border: none;
-    color: var(--muted);
-  }
-  .ring {
-    width: 62%;
-    max-width: 62px;
-    aspect-ratio: 1;
-    margin: 19% 0 8px;
-    border-radius: 50%;
-    border: 1.5px dashed var(--faint);
+  /* Quick switches and the save buttons sit at the bottom, under the thumb; spare height goes above them. */
+  .quick {
     display: grid;
-    place-items: center;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin: auto 0 2px;
+    padding-top: 4px;
   }
-  .ring svg {
-    width: 22px;
-    height: 22px;
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 22px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .chip.on {
+    color: var(--fg);
+  }
+  .chip.changed {
+    box-shadow: inset 0 0 0 1.5px var(--warn);
+  }
+  .chip.more {
+    color: var(--accent);
+  }
+  .chip svg {
+    width: 18px;
+    height: 18px;
     fill: none;
-    stroke: var(--accent);
+    stroke: currentColor;
     stroke-width: 2.2;
     stroke-linecap: round;
     stroke-linejoin: round;
-  }
-  .more.changed .ring {
-    border-color: var(--warn);
-  }
-  .moretitle {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--fg);
-  }
-  .moresub {
-    font-size: 0.62rem;
-    text-align: center;
-    line-height: 1.3;
   }
   .hint {
     color: var(--faint);
