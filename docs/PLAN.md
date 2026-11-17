@@ -796,8 +796,7 @@ Reglern des aktiven Typs in der bisherigen einfachen Form (Regler, dann Auswahl)
 Bedienkonzept kommt mit PR 2. Im Browser mit dem Mock geprüft. Gemergt als #27.
 
 PR 2 (17.11.2026, Branch `claude/phase-2-modfx`): **Entwürfe** A Seiten, B Gruppen, C Zeilen klickbar in
-`design.html` (nur Dev-Server, alle 31 Typen, echter Regler und echte Liste; danach gelöscht, steht in der
-Git-Geschichte). **Entschieden (17.11.2026): A Seiten.** Umgesetzt für alle Effekte mit Variationen
+`design.html` (nur Dev-Server, alle 31 Typen, echter Regler und echte Liste; danach gelöscht, nie committet). **Entschieden (17.11.2026): A Seiten.** Umgesetzt für alle Effekte mit Variationen
 (`src/ui/pages.ts`, getestet): höchstens 6 Regler je Seite (3 × 2), jede Gruppe (Voice 1, Low …) eigene Seite(n);
 Auswahlen, die für den ganzen Typ gelten (Type, Mode, Voice, Layer Mode), stehen über den Seiten. Reiter mit
 den Seitennamen, Punkte und Pfeile unten, seitlich wischen. Gruppen ohne Namen heißen „Allgemein“; bei Stimmen
