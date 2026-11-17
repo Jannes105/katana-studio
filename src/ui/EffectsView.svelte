@@ -72,7 +72,9 @@
     const unit = def.display?.unit;
     return (v) => {
       if (table) return table[v + off] ?? String(v);
-      const text = def.min - off < 0 ? signed(v) : String(v);
+      const n = v * (def.display?.factor ?? 1);
+      const digits = def.display?.decimals;
+      const text = def.min - off < 0 ? signed(n) : digits === undefined ? String(n) : n.toFixed(digits);
       return unit ? `${text} ${unit}` : text;
     };
   }

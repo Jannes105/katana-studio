@@ -17,6 +17,8 @@ export interface Display {
   readonly rawOffset?: number;
   readonly factor?: number;
   readonly unit?: string;
+  /** Decimal places of the shown number (e.g. 1 for 0.5 ms steps). */
+  readonly decimals?: number;
   /** Names by raw value (amp types, effect types). */
   readonly table?: readonly string[];
 }
@@ -46,6 +48,16 @@ export interface ParamDef {
    * in the patch either way; hiding is presentation only (PLAN 4.4: visibility rule).
    */
   readonly visibleFor?: readonly number[];
+  /**
+   * Group inside an effect page, e.g. `Voice 1` or `Low` (presentation only: how the UI splits a long list of
+   * knobs into groups or pages).
+   */
+  readonly group?: string;
+  /**
+   * Bytes (offsets from the patch base) the amp changes by itself when this parameter is written; the app
+   * reads them back afterwards (e.g. reverb layer mode and the Delay 2 switch, protocol-notes 2.8).
+   */
+  readonly alsoChanges?: readonly Address[];
   /** Raw steps per drag step of a knob (e.g. 5 for the delay time in ms); default 1. */
   readonly dragStep?: number;
   readonly status: Status;
@@ -84,7 +96,7 @@ export type Instances = readonly [Address, Address, Address];
  * instance is active follows the colour byte of the effect.
  */
 export interface VariantGroup {
-  readonly key: 'booster' | 'mod' | 'fx' | 'delay' | 'reverb';
+  readonly key: 'booster' | 'mod' | 'fx' | 'delay' | 'reverb' | 'delay2';
   readonly label: string;
   /** On/off switch of the effect (patch parameter). */
   readonly switch: ParamDef;
@@ -97,8 +109,8 @@ export interface VariantGroup {
   /** Block offset of each variation's parameter block (the type block itself for booster, delay and reverb). */
   readonly paramBlocks: Instances;
   /**
-   * Parameters relative to the parameter block (byte 0 is the type for booster, delay and reverb). Filled for
-   * booster, delay and reverb (Phase 1b); mod and FX follow in Phase 2. instanceParam() addresses them.
+   * Parameters relative to the parameter block (byte 0 is the type for booster, delay and reverb). Mod and FX
+   * share one list of all their types (modfx.ts). instanceParam() addresses them.
    */
   readonly params: readonly ParamDef[];
   readonly status: Status;

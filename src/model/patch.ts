@@ -159,8 +159,9 @@ export function readText(image: PatchImage, def: ParamDef): string | undefined {
 export function formatValue(def: ParamDef, raw: number): string {
   const d = def.display;
   if (d?.table) return d.table[raw] ?? `${def.label} ${raw}`;
-  const shown = (raw - (d?.rawOffset ?? 0)) * (d?.factor ?? 1);
-  return d?.unit ? `${shown} ${d.unit}` : String(shown);
+  const n = (raw - (d?.rawOffset ?? 0)) * (d?.factor ?? 1);
+  const shown = d?.decimals !== undefined ? n.toFixed(d.decimals) : String(n);
+  return d?.unit ? `${shown} ${d.unit}` : shown;
 }
 
 // ---- What Phase 1a shows ----

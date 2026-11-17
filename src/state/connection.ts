@@ -792,6 +792,19 @@ export class AmpConnection {
       stamp();
     } catch (error) {
       if (!isCancelled(error)) this.addLog('error', `Write failed: ${describe(error)}`);
+      return;
+    }
+    // Bytes the amp changes along with a written parameter (alsoChanges, e.g. layer mode and the Delay 2
+    // switch): read back, the reply comes in like a report and is applied by onMessage.
+    const written = new Set(runs.flatMap((r) => r.data.map((_, i) => r.offset + i)));
+    const coupled = new Set<Address>();
+    for (const at of written)
+      for (const c of writableParamAt(at)?.alsoChanges ?? []) if (!written.has(c)) coupled.add(c);
+    for (const c of coupled) {
+      queue.readBytes(ADDR.currentPatch + c, 1).catch((error: unknown) => {
+        if (!isCancelled(error))
+          this.addLog('warn', `Reading back a coupled byte failed: ${describe(error)}`);
+      });
     }
   }
 
