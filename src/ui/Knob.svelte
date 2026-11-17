@@ -1,7 +1,9 @@
 <script lang="ts">
   // Round knob (direction C): scale with 11 marks, cap, thin glowing arc. Drag up/down when enabled; double tap
-  // resets to the stored value. Changed against the stored slot: orange, with a dot at the stored position.
+  // resets to the stored value; a long press opens the explanation (Phase 3a) and changes nothing. Changed against the stored slot: orange, with a dot at the stored position.
   import { relativeDrag } from './drag';
+  import type { HelpTarget } from './help/help';
+  import { openHelp } from './help/state.svelte';
 
   let {
     label,
@@ -15,6 +17,7 @@
     onchange = () => {},
     onreset,
     onactive,
+    help,
   }: {
     label: string;
     /** Undefined while not read: the knob shows "–". */
@@ -29,6 +32,8 @@
     onchange?: (v: number) => void;
     onreset?: () => void;
     onactive?: (dragging: boolean) => void;
+    /** What a long press explains; without it a long press does nothing. */
+    help?: HelpTarget;
   } = $props();
 
   const START = 135;
@@ -77,6 +82,7 @@
     set: (x) => onchange(Math.min(max, Math.max(min, x * step))),
     enabled: () => enabled,
     ...(onreset ? { onDoubleTap: onreset } : {}),
+    ...(help ? { onLongPress: () => openHelp(help) } : {}),
     onDrag: (d) => {
       dragging = enabled && d;
       onactive?.(dragging);

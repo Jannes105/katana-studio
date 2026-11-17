@@ -13,10 +13,16 @@ export interface DragOptions {
   readonly onTap?: () => void;
   readonly onDoubleTap?: () => void;
   readonly onDrag?: (dragging: boolean) => void;
+  /**
+   * Long press (Phase 3a): held for LONG_PRESS_MS without moving DRAG_THRESHOLD_PX. It spends the gesture: no
+   * drag and no tap follow, so a long press never changes a value.
+   */
+  readonly onLongPress?: () => void;
 }
 
-const DRAG_THRESHOLD_PX = 6;
+export const DRAG_THRESHOLD_PX = 6;
 const DOUBLE_TAP_MS = 320;
+export const LONG_PRESS_MS = 450;
 
 export const relativeDrag: Action<HTMLElement, DragOptions> = (node, initial) => {
   let o = initial;
@@ -26,7 +32,13 @@ export const relativeDrag: Action<HTMLElement, DragOptions> = (node, initial) =>
   let startValue = 0;
   let dragging = false;
   let lastTap = 0;
+  let longTimer: ReturnType<typeof setTimeout> | undefined;
+  let spent = false;
   node.style.touchAction = 'none';
+  const stopTimer = (): void => {
+    clearTimeout(longTimer);
+    longTimer = undefined;
+  };
 
   const down = (e: PointerEvent): void => {
     if (pointer !== null) return;
@@ -35,13 +47,25 @@ export const relativeDrag: Action<HTMLElement, DragOptions> = (node, initial) =>
     startY = e.clientY;
     startValue = o.get();
     dragging = false;
+    spent = false;
     node.setPointerCapture(e.pointerId);
+    if (o.onLongPress) {
+      longTimer = setTimeout(() => {
+        longTimer = undefined;
+        spent = true;
+        lastTap = 0;
+        o.onLongPress?.();
+      }, LONG_PRESS_MS);
+    }
   };
 
   const move = (e: PointerEvent): void => {
-    if (e.pointerId !== pointer) return;
+    if (e.pointerId !== pointer || spent) return;
     const d = o.axis === 'x' ? e.clientX - startX : startY - e.clientY;
     if (!dragging) {
+      // Movement along either axis ends a pending long press; only the drag axis starts a drag.
+      if (Math.max(Math.abs(e.clientX - startX), Math.abs(e.clientY - startY)) >= DRAG_THRESHOLD_PX)
+        stopTimer();
       if (Math.abs(d) < DRAG_THRESHOLD_PX) return;
       dragging = true;
       o.onDrag?.(true);
@@ -54,6 +78,11 @@ export const relativeDrag: Action<HTMLElement, DragOptions> = (node, initial) =>
   const end = (e: PointerEvent, cancelled: boolean): void => {
     if (e.pointerId !== pointer) return;
     pointer = null;
+    stopTimer();
+    if (spent) {
+      spent = false;
+      return;
+    }
     if (dragging) {
       dragging = false;
       o.onDrag?.(false);
@@ -81,6 +110,7 @@ export const relativeDrag: Action<HTMLElement, DragOptions> = (node, initial) =>
       o = next;
     },
     destroy() {
+      stopTimer();
       node.removeEventListener('pointerdown', down);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', up);

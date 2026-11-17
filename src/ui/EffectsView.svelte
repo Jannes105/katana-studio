@@ -28,6 +28,9 @@
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
+  import { paramHelp, typeKey, type HelpTarget } from './help/help';
+  import { longPress } from './help/press';
+  import { openHelp } from './help/state.svelte';
   import { t, type Language, type TextKey } from './i18n';
   import {
     chainSettings,
@@ -256,6 +259,29 @@
   }
 
   const signed = (v: number): string => (v > 0 ? `+${v}` : String(v));
+
+  // ---- Explanations (Phase 3a): a long press explains a control and changes nothing ----
+  /** Where the open page belongs, shown above the title of an explanation: effect and type, or section. */
+  const helpContext = $derived.by((): string | undefined => {
+    if (row) {
+      if (row.key === 'delay' && delayTab === 'delay2') return DELAY2.label;
+      const name = row.colour === undefined ? undefined : row.typeNames[row.colour];
+      return name ? `${row.label} · ${name}` : row.label;
+    }
+    return sec?.label ?? (open === 'ns' ? NS_SWITCH.label : undefined);
+  });
+  const explain =
+    (def: ParamDef, title: string = def.label) =>
+    () =>
+      openHelp({ ...paramHelp(def, helpContext), title });
+  /** Mod and FX share one list of types; Delay 2 uses the delay types. */
+  const typeGroup = (g: VariantGroup): string =>
+    g.key === 'mod' || g.key === 'fx' ? 'modfx' : g.key === 'delay2' ? 'delay' : g.key;
+  function typeHelp(g: VariantGroup, name: string | undefined): HelpTarget {
+    return name
+      ? { key: typeKey(typeGroup(g), name), title: name, context: `${g.label} · ${t(lang, 'fx.type')}` }
+      : { key: 'type', title: t(lang, 'fx.type'), context: g.label };
+  }
   /** How a knob shows its value: name from the table, signed around a centre, with unit. */
   function format(def: ParamDef): (shown: number) => string {
     const off = def.display?.rawOffset ?? 0;
@@ -279,6 +305,7 @@
     aria-checked={on === true}
     aria-label={label}
     disabled={def === null || !editable(s, def)}
+    use:longPress={def ? explain(def, label) : undefined}
     onclick={() => def && set(def, on ? 0 : 1)}
   >
     {#if withState}<span class="state">{on ? t(lang, 'fx.on') : t(lang, 'fx.off')}</span>{/if}
@@ -300,6 +327,7 @@
     enabled={editable(s, def)}
     onchange={(x) => set(def, x + off)}
     onreset={() => void reset(def)}
+    help={paramHelp(def, helpContext)}
   />
 {/snippet}
 
@@ -312,6 +340,7 @@
       class:changed={v.changed}
       aria-haspopup="dialog"
       disabled={!editable(s, def)}
+      use:longPress={explain(def, label)}
       onclick={() => (choosingValue = def)}
     >
       <span class="tlabel">{label}</span>
@@ -327,6 +356,7 @@
             aria-checked={v.value === i}
             class:sel={v.value === i}
             disabled={!editable(s, def)}
+            use:longPress={explain(def, label)}
             onclick={() => set(def, i)}>{name}</button
           >
         {/each}
@@ -356,6 +386,7 @@
       class:changed
       aria-haspopup="dialog"
       disabled={!editable(s, typeDef)}
+      use:longPress={() => openHelp(typeHelp(g, name))}
       onclick={() => (choosingType = { group: g, colour })}
     >
       <span class="tlabel">{t(lang, 'fx.type')} · {colourName(colour)}</span>
@@ -522,6 +553,7 @@
               aria-checked={r.colour === c}
               style:--v={colourCss(c)}
               disabled={!editable(s, r.group.colour)}
+              use:longPress={explain(r.group.colour)}
               onclick={() => set(r.group.colour, c)}
             >
               <span class="vhead"><span class="vled"></span>{colourName(c)}</span>
@@ -559,6 +591,7 @@
               aria-checked={current === i}
               class:sel={current === i}
               disabled={!editable(s, typeDef)}
+              use:longPress={() => openHelp(typeHelp(ct.group, name))}
               onclick={() => chooseType(i)}>{name}</button
             >
           {/each}
@@ -618,7 +651,12 @@
       <ul class="list" style:--n={7}>
         {#each rows as r (r.key)}
           <li class:on={r.on} style:--c={colourCss(r.colour)}>
-            <button class="open" onclick={() => openItem(r.key)}>
+            <button
+              class="open"
+              use:longPress={() =>
+                openHelp(typeHelp(r.group, r.colour === undefined ? undefined : r.typeNames[r.colour]))}
+              onclick={() => openItem(r.key)}
+            >
               <span class="led"></span>
               <span class="text">
                 <span class="name"
