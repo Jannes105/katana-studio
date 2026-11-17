@@ -2,7 +2,7 @@
   // Chain tab (Phase 2, draft A "vertical", decided 2026-11-17): the signal path from input (top) to speaker
   // (bottom) as one line through all blocks. Drag a block up or down: the chain shows live where it would land,
   // only on places the amp allows (placeBlock), and takes it on release. Tap a block: a bar with on/off, ▲▼ (one
-  // step, for one hand) and the way to its page. Fits the height of <main> (container units).
+  // step, for one hand) and the way to its page. A long press explains the block (Phase 3a) and moves nothing. Fits the height of <main> (container units).
   import type { Snippet } from 'svelte';
   import { flip } from 'svelte/animate';
   import {
@@ -13,6 +13,8 @@
     type ChainBlock,
     type ChainSettings,
   } from '../model/chain';
+  import { DRAG_THRESHOLD_PX, LONG_PRESS_MS } from './drag';
+  import { openHelp } from './help/state.svelte';
   import { t, type Language } from './i18n';
 
   export interface BlockInfo {
@@ -63,6 +65,14 @@
     preview: ChainSettings;
   } | null>(null);
 
+  /** Pending long press on a block; `held` once it fired (the release then does nothing). */
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  let held = false;
+  const stopHold = (): void => {
+    clearTimeout(holdTimer);
+    holdTimer = undefined;
+  };
+
   const order = $derived(chainOrder(drag?.preview ?? settings));
   let listEl = $state<HTMLOListElement | null>(null);
 
@@ -76,9 +86,18 @@
       .filter((c) => c.b !== b);
     drag = { block: b, id: e.pointerId, y0: e.clientY, moved: false, centres, preview: settings };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    held = false;
+    stopHold();
+    holdTimer = setTimeout(() => {
+      holdTimer = undefined;
+      held = true;
+      drag = null;
+      openHelp({ key: `block.${b}`, title: info(b).label, context: t(lang, 'chain.order') });
+    }, LONG_PRESS_MS);
   }
   function move(e: PointerEvent): void {
     if (!drag || e.pointerId !== drag.id) return;
+    if (Math.abs(e.clientY - drag.y0) >= DRAG_THRESHOLD_PX) stopHold();
     if (!drag.moved && Math.abs(e.clientY - drag.y0) < 8) return;
     if (!enabled || !movable(drag.block)) return;
     drag.moved = true;
@@ -86,6 +105,11 @@
     drag.preview = placeBlock(settings, drag.block, target);
   }
   function up(e: PointerEvent): void {
+    stopHold();
+    if (held) {
+      held = false;
+      return;
+    }
     if (!drag || e.pointerId !== drag.id) return;
     const d = drag;
     drag = null;
@@ -95,6 +119,7 @@
     } else selected = selected === d.block ? null : d.block;
   }
   function cancel(): void {
+    stopHold();
     drag = null;
   }
   function step(b: ChainBlock, dir: -1 | 1): void {
@@ -130,6 +155,7 @@
             onpointermove={move}
             onpointerup={up}
             onpointercancel={cancel}
+            oncontextmenu={(e) => e.preventDefault()}
             onclick={(e) => {
               if (e.detail === 0) selected = selected === b ? null : b; // keyboard
             }}

@@ -23,6 +23,9 @@
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
+  import { paramHelp } from './help/help';
+  import { longPress } from './help/press';
+  import { openHelp } from './help/state.svelte';
   import { t, type Language } from './i18n';
   import {
     SECTION_LABEL,
@@ -173,6 +176,9 @@
     const result = await connection.revertParam(def);
     if (result && result.previous.length > 0) onUndoable(t(lang, 'undo.reset', { name: def.label }), result);
   }
+  /** Long press handler (Phase 3a): explain a parameter, shown with this title and context. */
+  const explain = (def: ParamDef, title: string, context?: string) => () =>
+    openHelp({ ...paramHelp(def, context), title });
   const AREAS: readonly [Area, 'ctl.knobs' | 'ctl.pedals' | 'ctl.switches' | 'ctl.system'][] = [
     ['knobs', 'ctl.knobs'],
     ['pedals', 'ctl.pedals'],
@@ -188,6 +194,7 @@
     class:changed={v.changed}
     aria-haspopup="dialog"
     disabled={!editable(s, def)}
+    use:longPress={explain(def, label, sub || undefined)}
     onclick={() => (choosing = { def, title: sub ? `${label} · ${sub}` : label })}
   >
     <span class="plabel"
@@ -213,6 +220,7 @@
     enabled={editable(s, def)}
     onchange={(x) => set(def, x + off)}
     onreset={() => void reset(def)}
+    help={paramHelp(def)}
   />
 {/snippet}
 
@@ -221,6 +229,7 @@
     class="pick"
     aria-haspopup="dialog"
     disabled={!sysEditable(def)}
+    use:longPress={explain(def, label, t(lang, 'ctl.system'))}
     onclick={() => (choosing = { def, title: label, system: true })}
   >
     <span class="plabel">{label}</span>
@@ -241,6 +250,7 @@
     format={format(r)}
     enabled={sysEditable(def)}
     onchange={(x) => setSys(def, x + off)}
+    help={paramHelp(def, t(lang, 'ctl.system'))}
   />
 {/snippet}
 
@@ -263,6 +273,7 @@
         role="switch"
         aria-checked={sysRaw(on) === 1}
         disabled={!sysEditable(on)}
+        use:longPress={explain(on, on.label, t(lang, 'ctl.system'))}
         onclick={() => setSys(on, sysRaw(on) === 1 ? 0 : 1)}
       >
         <span class="plabel">{on.label}</span>
@@ -275,6 +286,7 @@
             aria-checked={sysRaw(sel) === i}
             class:sel={sysRaw(sel) === i}
             disabled={!sysEditable(sel)}
+            use:longPress={explain(sel, sel.label, t(lang, 'ctl.system'))}
             onclick={() => setSys(sel, i)}>{name}</button
           >
         {/each}
@@ -361,7 +373,12 @@
         {@const changed = PATCH_PARAMS.some(
           (p) => p.key.startsWith(`assign.${i.key}.`) && paramView(s, p).changed,
         )}
-        <button class="row" class:changed onclick={() => (input = i)}>
+        <button
+          class="row"
+          class:changed
+          use:longPress={() => openHelp({ key: `ctl.input.${i.key}`, title: i.label })}
+          onclick={() => (input = i)}
+        >
           <span class="rlabel">{i.label}</span>
           <span class="rsub">{sm.text}</span>
           {#if sm.range}<span class="rrange">{sm.range}</span>{/if}
@@ -371,7 +388,16 @@
     {:else if area === 'system'}
       <p class="warn">{t(lang, 'ctl.systemNote')}</p>
       {#each SYSTEM_SECTIONS as sec (sec)}
-        <button class="row" onclick={() => (section = sec)}>
+        <button
+          class="row"
+          use:longPress={() =>
+            openHelp({
+              key: `system.section.${sec}`,
+              title: SECTION_LABEL[sec],
+              context: t(lang, 'ctl.system'),
+            })}
+          onclick={() => (section = sec)}
+        >
           <span class="rlabel">{SECTION_LABEL[sec]}</span>
           <span class="rsub">{sectionSummary(sec)}</span>
           <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
