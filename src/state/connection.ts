@@ -34,10 +34,11 @@ import { patchName } from '../protocol/encoding';
 import { SendQueue, type Diagnostic } from '../protocol/queue';
 import { hex, type ParsedMessage } from '../protocol/sysex';
 import { PATCH_NAME, PATCH_PARAMS, VARIATION_PARAMS } from '../model/params';
-import { PatchImage, patchBlockAt, patchNameFrom, readText } from '../model/patch';
+import { PatchImage, patchBlockAt, patchNameFrom, readRaw, readText } from '../model/patch';
+import { RANGE_DEPENDENTS } from '../model/assigns';
 import { isComplete, type BackupFile, type BlockBytes, type PatchFile } from '../storage/format';
 import { patchFileFrom, readBackup, type FileMeta } from './backup';
-import { encodingSize, writable, type ParamDef } from '../model/schema';
+import { effectiveRange, encodingSize, writable, type ParamDef } from '../model/schema';
 
 export const ECHO_GUARD_MS = 300;
 export const PATCH_CHANGE_QUIET_MS = 100;
@@ -103,6 +104,16 @@ const WRITABLE_AT: ReadonlyMap<Address, ParamDef> = new Map(
     .filter(writable)
     .flatMap((p) => Array.from({ length: encodingSize(p.encoding) }, (_, i) => [p.at + i, p] as const)),
 );
+
+/** Patch parameters by key (for rangeBy: the target a min/max follows). */
+const PATCH_PARAM_BY_KEY: ReadonlyMap<string, ParamDef> = new Map(
+  PATCH_PARAMS.map((p) => [p.key, p] as const),
+);
+
+/** Raw value of a numeric parameter as bytes. */
+function encodeValue(def: ParamDef, v: number): number[] {
+  return def.encoding === 'u4x4' ? u4x4.encode(v) : u7.encode(v);
+}
 
 /** The writable parameter that covers a patch offset, if any. */
 export function writableParamAt(offset: Address): ParamDef | undefined {
@@ -385,9 +396,22 @@ export class AmpConnection {
    */
   async setValue(def: ParamDef, raw: number): Promise<void> {
     if (!this.canWrite() || !writable(def) || def.encoding === 'ascii16') return;
-    const v = Math.min(def.max, Math.max(def.min, Math.round(raw)));
-    const data = def.encoding === 'u4x4' ? u4x4.encode(v) : u7.encode(v);
-    await this.writeRuns([{ offset: def.at, data }]);
+    const current = this.stateValue.current;
+    const valueOf = (key: string): number | undefined => {
+      const d = PATCH_PARAM_BY_KEY.get(key);
+      return d && readRaw(current, d);
+    };
+    // Assign min/max: clamp to the range of the target (the amp stores anything, protocol-notes 2.8).
+    const range = effectiveRange(def, valueOf);
+    const v = Math.min(range.max, Math.max(range.min, Math.round(raw)));
+    const runs = [{ offset: def.at, data: encodeValue(def, v) }];
+    // A new assign target: min/max go to its full range, as in BOSS Tone Studio (the amp keeps them).
+    for (const dep of RANGE_DEPENDENTS.get(def.key) ?? []) {
+      if (!writable(dep)) continue;
+      const r = effectiveRange(dep, (k) => (k === def.key ? v : valueOf(k)));
+      runs.push({ offset: dep.at, data: encodeValue(dep, dep.key.endsWith('.min') ? r.min : r.max) });
+    }
+    await this.writeRuns(runs);
   }
 
   /** True while writes are allowed: connected, not read-only, not reading, no backup or save running. */

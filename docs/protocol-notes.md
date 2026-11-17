@@ -155,7 +155,7 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `58 00` + 1 | noise suppressor threshold | `u7` 0–100 | **[C 2026-11-14]** written by DT1, change was audible |
 | `58 00` + 2 | noise suppressor release | `u7` 0–100 | **[C 2026-11-16]** written (`-ParamTest`), read back, change seen or heard |
 | `5A 00` | send/return | | [D] |
-| `5C 00` ff. | assigns | | [D] |
+| `5C 00` ff. | assigns, see "Assigns" below | | **[C 2026-11-17]** for instance (1); the (2) blocks [O] |
 
 **Blocks for Phase 2** (local analysis of BOSS Tone Studio, 2026-11-17; names as in the `.tsl` file, 2.14).
 Byte offsets from the block start; raw ranges. **[C 2026-11-17]** for everything in this table except the solo
@@ -241,6 +241,75 @@ Ranges are raw values; "shown" is raw minus the offset.
 | reverb | 9 | density | 0–10 | |
 | reverb | 10, 11 | effect level, direct mix | 0–100 | |
 | reverb | 12 | spring color | 0–100 | SPRING only |
+
+**Assigns** (Phase 3; local analysis of BOSS Tone Studio, 2026-11-17). Each assign block has one field per
+effect: booster, delay, reverb, then the 31 mod/FX types (34 fields). The target field picks a parameter of that
+effect; 0 is "Preset" (0–100), the others are the effect's own knobs. Min and max store the raw value of the
+target in a wider field of their own (`u7` 0–127, `u4x4` for times: delay 0–2000, reverb 0–500 ms, …; 49 bytes
+per min or max block). Every stored slot in every capture holds the same factory state: expression pedal
+function 3 (Pedal FX/FV), all targets 0, all minimums 0, maximums 127 (or the largest time), GA-FC switches
+`68 00` = 0, 4, 1 and `6A 00` = 2, 6, 5. Expression functions: 0 Volume, 1 Foot Volume, 2 Pedal FX, 3 Pedal
+FX/FV, 4 Booster, 5 Mod, 6 FX, 7 Delay, 8 Delay 2, 9 Reverb.
+
+Schema probe **[C 2026-11-17]** (`katana-probe.ps1 -ParamTest -NoAsk -Status D -Only '^assign\.'`, PC, current
+patch only, no PATCH_WRITE, after a complete backup; `captures/param-test-20261117-171042.json`, `…171057.json`):
+expression function `5E 00` + 0, delay target `60 00` + 1, delay min `62 00` + 1…4 and delay max `64 00` + 1…4
+(`u4x4`) were written, read back, changed no other byte and were restored. Two findings:
+
+- **The amp stores min/max raw, without checking the target range**: with the delay target set to feedback
+  (0–100) a max of 1800 read back as 1800. The app must clamp to the target's range itself.
+- **Changing the target does not touch min/max** (target 0 → 1: no other byte changed). BOSS Tone Studio sets
+  min/max to the full range of the new target in that case; the app has to do the same.
+
+Not checked yet: what the amp does with a value beyond the target range (e.g. the factory max 127 with target
+Preset 0–100); this needs a pedal and listening.
+
+| Block | `.tsl` name | Bytes | Content |
+|---|---|---|---|
+| `5C 00` | ASSIGN_KNOBS | 34 | target of the effect knob on the amp, one field per effect (booster, delay, reverb, 31 mod/FX types) |
+| `5E 00` | ASSIGN_EXPPDL_FUNC | 1 | expression pedal on the amp: function 0–9 |
+| `60 00` | ASSIGN_EXPPDL_DETAIL | 34 | its target per field |
+| `62 00`, `64 00` | ASSIGN_EXPPDL_MIN / MAX | 49 each | its min/max per field: booster +0, delay +1…4, reverb +5…8, the 22 types chorus … octave +9…30, pitch shifter +31…34, harmonist +35…38, humanizer, phaser 90E, flanger 117E, wah 95E +39…42, DC-30 +43…46, heavy octave +47, pedal bend +48 |
+| `66 00` | ASSIGN_FS | 2 | footswitch on the amp, tip and ring: 0 CH 1/2, 1 BANK A/B, 2 SOLO ON/OFF |
+| `68 00` | ASSIGN_GAFCFS(1) | 3 | GA-FC FS1–3: 0 BANK A/B, 1 PEDAL FX, 2 SEND/RETURN, 3 EQ, 4 DELAY TAP, 5 DELAY2 TAP, 6 BOOSTER SOLO, 7 SOLO, 8 GLOBAL EQ, 9 EQ2 (each "ON/OFF" except the taps; BOSS Tone Studio lists 9 after 3) |
+| `6C 00`, `70 00`, `74 00`, `78 00` | ASSIGN_GAFCEXPPDL1_FUNC/DETAIL/MIN/MAX(1) | 1, 34, 49, 49 | GA-FC EXP 1, same layout as the pedal on the amp |
+| `7C 00`, `01 00 00`, `01 04 00`, `01 08 00` | …EXPPDL2…(1) | | GA-FC EXP 2 |
+| `01 0C 00`, `01 10 00`, `01 14 00`, `01 18 00` | …EXPPDL3…(1) | | GA-FC EXP 3 |
+| `6A 00`, `6E 00`, `72 00`, `76 00`, `7A 00`, `7E 00`, `01 02 00` … `01 1A 00` (every second block) | the same names with (2) | | not used by BOSS Tone Studio for the Gen 3 (only its MkII code refers to them); not in our list, kept raw. Open: what the amp uses them for (the factory values of `6A 00` differ from `68 00`) [O] |
+
+**All 451 addresses [C 2026-11-17]** (`katana-probe.ps1 -ParamTest -NoAsk -Status D -Only '^assign.'`, PC,
+current patch only, no PATCH_WRITE; `captures/param-test-20261117-174139.json`): the 447 not yet checked by
+the schema probe were written, read back, changed no other byte and were restored; the whole patch was as
+before after each one. Nobody listened (no pedal plugged in); the meaning rests on the layout.
+
+**The GA-FC on the amp** [C 2026-11-17] (the original GA-FC: six footswitches, two EXP PEDAL jacks, no pedal
+plugged in; `katana-probe.ps1 -EditorMode 1 -Listen 150`, read-only, capture `katana-probe-20261117-181446.json`).
+The owner pressed the switches in a fixed order; with editor mode on the amp reported every action as usual:
+
+| On the GA-FC | Reported by the amp |
+|---|---|
+| 1–4 | patch number 1–4 (channels of the current bank), followed by the patch as after a channel change on the amp |
+| PANEL | patch number 0 (Panel); also one block of the TEMP area (`30 00 02 00`, 5 bytes) |
+| EFFECT short | nothing; switches the GA-FC to effect mode |
+| in effect mode 1, 2, 3, 4, PANEL | switch bytes `08 00` + 0, 1, 2, 3, 5 (booster, mod, FX, delay, reverb) and the colour status `7F 01 01 0n`; changes of the current patch (unsaved), not of a stored slot. One press on 4 toggled the delay three times within 0.1 s (bounce or tap; not repeated) |
+| EFFECT short again | nothing; back to channel mode |
+| EFFECT held, then 1–4 | solo `3A 00` + 0 toggled (three reports for four presses) |
+| PANEL held | patch number 5 (bank A → B) |
+
+SYSTEM was the same before and after; the assign blocks did not change. The SYSTEM block `10 00 22 00` (GA-FC
+functions SW1–4 and PANEL, same table of ten functions as the patch's GA-FC FS1–3) reads `07 07 07 07 07` =
+SOLO ON/OFF on this amp, which fits the solo reports after holding EFFECT: holding EFFECT selects the function
+mode, and the functions there come from SYSTEM (system-wide), not from the patch. What the patch's GA-FC FS1–3
+(`68 00`) do with the original GA-FC was not seen; they may belong to the GA-FC EX. [D]
+
+Our list (`src/model/assigns.ts`, 451 parameters) was compared entry by entry with the address map of BOSS Tone
+Studio for instance (1): same offset, size and range for all 451, none missing. Two details from the analysis:
+
+- The function Delay 2 of an expression input uses the delay field.
+- BOSS Tone Studio's own assign page keeps a second table of min/max positions per type; it agrees with the
+  address map up to the harmonist and is off for humanizer … pedal bend (e.g. heavy octave and pedal bend both at
+  +41, which is flanger 117E). The address map fits the factory values in every capture (pitch shifter and
+  harmonist max 300 ms at +31 and +35, DC-30 max 600 at +43), so our list follows the address map.
 
 **Checking a [D] address on the amp:** `npm run params:export` writes our parameter list from `src/model` to
 `tools/param-list.json` (generated, git-ignored; since Phase 2, before that the probe had its own copy).

@@ -6,6 +6,7 @@ import { MockAmp } from '../../src/mock/mock-amp';
 import { MockDevice } from '../../src/mock/mock-device';
 import { AMP_GAIN, NS_THRESHOLD, EFFECTS, effectType } from '../../src/model/params';
 import { readRaw } from '../../src/model/patch';
+import { ASSIGN_PARAMS } from '../../src/model/assigns';
 import { instanceParam, type ParamDef } from '../../src/model/schema';
 import { AmpConnection, slotName, type ConnectionState } from '../../src/state/connection';
 
@@ -145,6 +146,32 @@ describe('AmpConnection: values, reports and "unsaved"', () => {
     // Delay variation 2 is block 2C 00; the time is bytes 1–4, clamped to 2000 ms = 0x7D0.
     expect(amp.peek(ADDR.currentPatch + addr(0, 0, 0x2c, 0x01), 4)).toEqual([0, 7, 13, 0]);
     expect(readRaw(connection.state.current, time)).toBe(2000);
+  });
+
+  it('a new assign target sets min/max to its full range; min/max are clamped to the target', async () => {
+    const { amp, connection } = await started();
+    const p = (key: string): ParamDef => {
+      const d = ASSIGN_PARAMS.find((x) => x.key === key);
+      if (!d) throw new Error(key);
+      return d;
+    };
+    const [target, min, max] = ['target', 'min', 'max'].map((k) => p(`assign.exp.delay.${k}`)) as [
+      ParamDef,
+      ParamDef,
+      ParamDef,
+    ];
+    void connection.setValue(target, 1); // Time, 1–2000 ms
+    await tick(20);
+    expect(amp.peek(ADDR.currentPatch + target.at)).toEqual([1]);
+    expect(readRaw(connection.state.current, min)).toBe(1);
+    expect(readRaw(connection.state.current, max)).toBe(2000);
+    void connection.setValue(target, 2); // Feedback, 0–100
+    await tick(20);
+    expect(amp.peek(ADDR.currentPatch + max.at, 4)).toEqual([0, 0, 6, 4]);
+    expect(readRaw(connection.state.current, min)).toBe(0);
+    void connection.setValue(max, 1800); // the amp would keep 1800; the app clamps to the target
+    await tick(20);
+    expect(readRaw(connection.state.current, max)).toBe(100);
   });
 
   it('follows a knob report from the amp, but not within 300 ms of an own write (rule 2)', async () => {
