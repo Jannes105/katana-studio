@@ -30,6 +30,7 @@ const base: ConnectionState = {
   patchIndex: 1,
   patchName: 'X',
   current: image(40),
+  system: PatchImage.EMPTY_SYSTEM,
   stored: image(40),
   storedIndex: 1,
   unsaved: [],

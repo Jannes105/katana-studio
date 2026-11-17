@@ -51,6 +51,33 @@ const OFFSET_SWITCHES = addr(0, 0, 0x08, 0x00); // 6 bytes: on/off; byte 4 is De
 /** Switch byte of each of the five effects (reverb sits at 5, not 4). */
 const SWITCH_INDEX = [0, 1, 2, 3, 5] as const;
 
+/** SYSTEM factory values, one row per block (21 blocks, protocol-notes 2.6/2.12). */
+const PEQ_FLAT = [0, 20, 14, 1, 20, 23, 1, 20, 20, 14, 20];
+const GEQ_FLAT = new Array<number>(11).fill(24);
+const SYSTEM_FACTORY: readonly (readonly number[])[] = [
+  [0], // stereo expand
+  [20, 50, 25, 0, 50], // USB
+  [0, 0], // global EQ off, memory 1
+  [0, 0],
+  [0, 0],
+  [0, 0],
+  PEQ_FLAT,
+  PEQ_FLAT,
+  PEQ_FLAT,
+  GEQ_FLAT,
+  GEQ_FLAT,
+  GEQ_FLAT,
+  [0, 0, 0], // line out
+  [2, 2, 2, 0, 0],
+  [2, 2, 2, 0, 0],
+  [0, 0, 20], // power amp in
+  [4], // power control
+  [6, 1, 2, 4, 5], // GA-FC function mode
+  [0], // MIDI channel 1
+  [15, 16, 17, 18, 19, 20, 47, 48, 49, 52, 50, 51, 56, 53, 54, 55, 57, 58, 59],
+  [4, 0, 1, 2, 3, 5, 6, 7, 8],
+];
+
 /** Simulated faults of PATCH_WRITE from the app (PLAN 5, 1c: a simulated fault must show a message). */
 export type SaveFault = 'none' | 'no-ack' | 'wrong-content';
 
@@ -127,6 +154,8 @@ export class MockAmp implements Transport {
     }
     this.copyPatch(storedPatchAddress(this.patchNumber), ADDR.currentPatch);
     this.poke(ADDR.patchNumber, u2x4.encode(this.patchNumber));
+    // SYSTEM at the factory values (protocol-notes 2.6), so the system pages show something plausible.
+    SYSTEM_FACTORY.forEach((data, i) => this.poke(ADDR.system + i * addr(0, 0, 0x02, 0), data));
   }
 
   // ---- Transport ----

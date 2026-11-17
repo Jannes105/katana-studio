@@ -171,8 +171,11 @@ const en = {
   'ctl.noTarget': 'This function needs no target.',
   'ctl.back': 'Back to control',
   'ctl.gafcFs': 'GA-FC FS1–3 in this patch',
-  'ctl.gafcFsNote': 'The function mode of the GA-FC (hold EFFECT) uses the system settings, not these.',
+  'ctl.gafcFsNote': 'Not used by the function mode (hold EFFECT); that one uses the settings above.',
   'ctl.ampFs': 'Footswitch on the amp',
+  'ctl.system': 'System',
+  'ctl.systemNote': 'Applies to every channel · the amp stores it at once',
+  'ctl.gafcSystem': 'GA-FC function mode (hold EFFECT) · every channel',
 
   'log.copy': 'Copy log',
   'log.copyCapture': 'Copy capture',
@@ -369,9 +372,11 @@ const de: Record<TextKey, string> = {
   'ctl.noTarget': 'Diese Funktion braucht kein Ziel.',
   'ctl.back': 'Zurück zu Steuerung',
   'ctl.gafcFs': 'GA-FC FS1–3 in diesem Patch',
-  'ctl.gafcFsNote':
-    'Der Funktions-Modus des GA-FC (EFFECT halten) nutzt die Systemeinstellungen, nicht diese.',
+  'ctl.gafcFsNote': 'Nicht für den Funktions-Modus (EFFECT halten); der nutzt die Einstellungen oben.',
   'ctl.ampFs': 'Fußschalter am Amp',
+  'ctl.system': 'System',
+  'ctl.systemNote': 'Gilt für alle Kanäle · der Amp speichert sofort',
+  'ctl.gafcSystem': 'GA-FC Funktions-Modus (EFFECT halten) · alle Kanäle',
 
   'log.copy': 'Log kopieren',
   'log.copyCapture': 'Mitschnitt kopieren',

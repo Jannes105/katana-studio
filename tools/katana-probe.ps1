@@ -41,6 +41,14 @@ param(
   [switch]$NoAsk,
   # With -ParamTest: also test knobs of other effect types (their bytes exist in the block whatever the type).
   [switch]$AllTypes,
+  # With -ParamTest: test SYSTEM parameters (10 00 xx xx, rows with area 'system') instead of the patch. SYSTEM
+  # applies to every channel, so -Only is required (only what was agreed), SYSTEM is saved to
+  # system-backup-<time>.json first, and at the end the whole of SYSTEM is compared with the start.
+  [switch]$System,
+  # Writes and keeps: sets the -Set values (patch or SYSTEM parameters of the list, e.g.
+  # 'system.gafc.sw2=4') and does not restore them. Saves SYSTEM to system-backup-<time>.json first and prints
+  # each old value, so it can be set back by hand. Never PATCH_WRITE.
+  [switch]$SetOnly,
   # Writes: large DT1 (whole blocks, up to 225 bytes) into the current patch only (never PATCH_WRITE, never a
   # stored slot). Writes blocks back unchanged (one, then all 78 writable ones in a burst without gap and with
   # the BOSS Tone Studio gap), then one real change in a 17-byte and in a 225-byte block, each restored. At the
@@ -484,17 +492,21 @@ try {
   }
 
   if ($ParamTest) {
-    "`n== Parameter test: current patch only (20 00 xx xx), every value is written back"
+    if ($System) {
+      "`n== Parameter test: SYSTEM (10 00 xx xx), every value is written back; never PATCH_WRITE"
+      if (-not $Only) { 'Stopped: -System needs -Only (the parameters agreed beforehand).'; return }
+    }
+    else { "`n== Parameter test: current patch only (20 00 xx xx), every value is written back" }
     if (-not $NoAsk -and (Read-Host 'Complete backup made (app or BOSS Tone Studio)? [y/N]') -ne 'y') { 'Stopped: make a backup first.'; return }
 
     # Our parameter list, generated from src/model by `npm run params:export` (tools/param-list.ts). Offsets are
     # linear from the patch base; variation parameters carry colour byte, switch and blocks of the effect.
     if (-not (Test-Path $ListFile)) { "Stopped: $ListFile is missing. Run: npm run params:export"; return }
     $allRows = @((Get-Content -Raw $ListFile | ConvertFrom-Json).rows)
-    $items = $allRows
+    $items = @($allRows | Where-Object { ($_.area -eq 'system') -eq [bool]$System })
     if ($Only) { $items = @($items | Where-Object { $_.key -match $Only }) }
     if ($Status) { $items = @($items | Where-Object { $_.status -eq $Status }) }
-    $patchLin = Lin ([byte[]](0x20, 0, 0, 0))
+    $patchLin = Lin ([byte[]]$(if ($System) { (0x10, 0, 0, 0) } else { (0x20, 0, 0, 0) }))
     function PAddr([int]$off) { LinBytes ($patchLin + $off) }
 
     function ReadAt([byte[]]$a, [int]$size) {
@@ -521,7 +533,8 @@ try {
     # The whole current patch, one entry per byte (linear address -> value).
     function PatchMap {
       $map = @{}
-      foreach ($d in (Ask (Rq1 (0x20, 0, 0, 0) (0, 2, 0, 0)) 'RQ1 current patch' 1500 300).Dt1) {
+      $req = if ($System) { @((0x10, 0, 0, 0), (0, 1, 0, 0), 'RQ1 SYSTEM') } else { @((0x20, 0, 0, 0), (0, 2, 0, 0), 'RQ1 current patch') }
+      foreach ($d in (Ask (Rq1 $req[0] $req[1]) $req[2] 1500 300).Dt1) {
         for ($i = 0; $i -lt $d.Data.Length; $i++) { $map[[int]($d.Lin + $i)] = [int]$d.Data[$i] }
       }
       $map
@@ -557,6 +570,15 @@ try {
       $preset += [pscustomobject]@{ Key = $row.key; A = $pa; Size = [int]$row.size; Old = $old }
       $null = Ask (Dt1 $pa (Enc ([int]$val) $row.size)) "DT1 preset $($row.key) = $val" 150 40
       "preset $($row.key): $old -> $val, read back $(ReadAt $pa $row.size)"
+    }
+    $systemStart = $null
+    if ($System) {
+      $systemStart = PatchMap
+      if ($systemStart.Count -lt 131) { "Stopped: SYSTEM read incomplete ($($systemStart.Count) of 131 bytes)"; return }
+      New-Item -ItemType Directory -Force $OutDir | Out-Null
+      $bf = Join-Path $OutDir ("system-backup-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+      [ordered]@{ tool = 'katana-probe.ps1 -ParamTest -System'; at = (Get-Date).ToString('o'); bytes = ($systemStart.Keys | Sort-Object | ForEach-Object { [ordered]@{ address = (LinHex $_); value = $systemStart[$_] } }) } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $bf
+      "SYSTEM saved before the test: $bf"
     }
     $results = @(); $n = 0; $quit = $false
     try {
@@ -640,6 +662,10 @@ try {
       }
     }
 
+    if ($System -and $systemStart) {
+      $left = @(MapDiff $systemStart (PatchMap) @())
+      "`nwhole SYSTEM as at the start: $(if ($left.Count -eq 0) { 'yes' } else { 'NO: ' + ($left -join ', ') })"
+    }
     "`n== Summary"
     foreach ($r in $results) {
       if ($r.result) { "  {0,-24} {1}" -f $r.key, $r.result; continue }
@@ -652,6 +678,35 @@ try {
     $rf = Join-Path $OutDir ("param-test-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     [ordered]@{ tool = 'katana-probe.ps1 -ParamTest'; at = (Get-Date).ToString('o'); results = $results } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $rf
     "Results saved: $rf"
+    return
+  }
+
+  if ($SetOnly) {
+    "`n== Set and keep (no restore): $Set"
+    if (-not $Set) { 'Stopped: -SetOnly needs -Set.'; return }
+    if (-not (Test-Path $ListFile)) { "Stopped: $ListFile is missing. Run: npm run params:export"; return }
+    $rowsAll = @((Get-Content -Raw $ListFile | ConvertFrom-Json).rows)
+    $sys = ReadBlocks (0x10, 0, 0, 0) 'SYSTEM (before)' (0, 1, 0, 0)
+    if ($sys.Count -ne 21) { "Stopped: SYSTEM read incomplete ($($sys.Count) of 21 blocks)"; return }
+    New-Item -ItemType Directory -Force $OutDir | Out-Null
+    $bf = Join-Path $OutDir ("system-backup-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    [ordered]@{ tool = 'katana-probe.ps1 -SetOnly'; at = (Get-Date).ToString('o'); blocks = ($sys.Keys | Sort-Object | ForEach-Object { [ordered]@{ offset = (OfsHex $_); data = (Hex $sys[$_]) } }) } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $bf
+    "SYSTEM saved before: $bf"
+    foreach ($pair in ($Set -split ',' | Where-Object { $_ })) {
+      $k, $val = $pair -split '=', 2
+      $row = $rowsAll | Where-Object { $_.key -eq $k.Trim() } | Select-Object -First 1
+      if (-not $row -or $row.size -ne 1) { "skipped $k (not a one-byte parameter of the list)"; continue }
+      $v = [int]$val
+      if ($v -lt $row.min -or $v -gt $row.max) { "skipped $k = $v (outside $($row.min)-$($row.max))"; continue }
+      $base = if ($row.area -eq 'system') { Lin (0x10, 0, 0, 0) } else { Lin (0x20, 0, 0, 0) }
+      $a = LinBytes ($base + $row.at)
+      $read = { $x = Ask (Rq1 $a (0, 0, 0, 1)) ("RQ1 " + (Hex $a)) 400 60; $d = @($x.Dt1 | Where-Object { $_.Lin -eq (Lin $a) }); if ($d.Count) { [int]$d[-1].Data[0] } else { -1 } }
+      $old = & $read
+      $null = Ask (Dt1 $a ([byte[]](, $v))) "DT1 $($row.key) = $v (kept)" 300 100
+      "$($row.key) at $(Hex $a): $old -> $v, read back $(& $read)"
+      $script:Results[$row.key] = [ordered]@{ address = (Hex $a); old = $old; new = $v }
+    }
+    SaveResults 'set'
     return
   }
 
