@@ -11,10 +11,12 @@
 //  5. read again when the app returns to the foreground (onForeground) and after every reconnect
 //  6. "unsaved" = difference to the stored slot of the channel, read in the background after each patch read
 //     and after every save
-//  7. back to the stored state: per parameter (revertParam), all (revertAll), each with undo; remembered
-//     changes of a channel are written back only on request (restoreRemembered)
+//  7. back to the stored state: per parameter (revertParam), all (revertAll, whole blocks), each with undo;
+//     remembered changes of a channel are written back only on request (restoreRemembered, whole blocks)
 //  8. after a restart or reconnect the app greets and reads, it never writes on its own
 //  9. a pulled cable is a normal state: values freeze, the app reconnects when the amp comes back
+// 10. saving onto the channel only after the user confirmed (save): PATCH_WRITE, wait for the acknowledgement,
+//     read the slot back and compare it with the patch at the time of saving (PLAN 4.3, protocol-notes 2.15)
 
 import type { DeviceEvent, DeviceTransport, Transport } from '../midi/transport';
 import {
@@ -27,6 +29,7 @@ import {
 } from '../protocol/address';
 import { u2x4, u4x4, u7 } from '../protocol/encoding';
 import { greet, modelName, type GreetingWarning } from '../protocol/greeting';
+import { READ_ONLY_PATCH_OFFSETS, blockKey } from '../protocol/blocks';
 import { SendQueue, type Diagnostic } from '../protocol/queue';
 import { hex, type ParsedMessage } from '../protocol/sysex';
 import { PATCH_NAME, PATCH_PARAMS, VARIATION_PARAMS } from '../model/params';
@@ -39,6 +42,8 @@ export const ECHO_GUARD_MS = 300;
 export const PATCH_CHANGE_QUIET_MS = 100;
 export const PATCH_CHANGE_MAX_WAIT_MS = 300;
 export const LOG_LIMIT = 1000;
+/** Wait for the acknowledgement of PATCH_WRITE (measured: about 2 ms, protocol-notes 2.15). */
+export const SAVE_ACK_TIMEOUT_MS = 2000;
 
 /** Channels the app may select (PLAN 5, 1b: A1–B4; the Panel is only shown). */
 export const SELECTABLE_CHANNELS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
@@ -61,7 +66,21 @@ export interface WriteResult {
   readonly skipped: number;
   /** Patch change counter at the time of the write; undo() refuses after a patch change. */
   readonly generation: number;
+  /** Written as whole raw blocks (revert all, restore); undo() writes the same way. */
+  readonly wholeBlocks: boolean;
 }
+
+/**
+ * Outcome of saving (rule 10). `saved`: acknowledged and the slot read back equals the patch at the time of
+ * saving. `mismatch`: the slot differs in these blocks (keys). `no-ack`: the amp did not acknowledge within
+ * SAVE_ACK_TIMEOUT_MS. `unchecked`: acknowledged, but the slot could not be read back. `aborted`: channel change
+ * or amp unplugged while saving. `refused`: saving is not possible right now (nothing was sent).
+ */
+export type SaveResult =
+  | { readonly kind: 'saved'; readonly index: number }
+  | { readonly kind: 'mismatch'; readonly index: number; readonly blocks: readonly string[] }
+  | { readonly kind: 'no-ack' | 'unchecked' | 'aborted'; readonly index: number }
+  | { readonly kind: 'refused' };
 
 /** Every writable parameter by each of its byte offsets (PLAN 4.4: only addresses from our list are written). */
 const WRITABLE_AT: ReadonlyMap<Address, ParamDef> = new Map(
@@ -103,6 +122,8 @@ export interface ConnectionState {
   readonly lastReadAt: number | null;
   /** True while a complete backup is being read. */
   readonly backingUp: boolean;
+  /** True while saving onto the channel (writes are locked). */
+  readonly saving: boolean;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'in' | 'out';
@@ -140,6 +161,7 @@ const INITIAL: ConnectionState = {
   reading: false,
   lastReadAt: null,
   backingUp: false,
+  saving: false,
 };
 
 export function slotName(index: number | null): string {
@@ -197,6 +219,8 @@ export class AmpConnection {
   private patchGeneration = 0;
   private currentCollector: PatchCollector | undefined;
   private storedCollector: PatchCollector | undefined;
+  /** The acknowledgement of PATCH_WRITE being waited for (rule 10). */
+  private saveAck: { readonly index: number; readonly settle: (ok: boolean) => void } | undefined;
 
   constructor(
     private readonly device: DeviceTransport,
@@ -348,7 +372,7 @@ export class AmpConnection {
     await this.writeRuns([{ offset: def.at, data }]);
   }
 
-  /** True while writes are allowed: connected, not read-only, not reading, no backup running. */
+  /** True while writes are allowed: connected, not read-only, not reading, no backup or save running. */
   canWrite(): boolean {
     const s = this.stateValue;
     return (
@@ -357,41 +381,52 @@ export class AmpConnection {
       !s.readOnly &&
       !s.reading &&
       !s.backingUp &&
+      !s.saving &&
       s.current.complete
     );
   }
 
   /**
-   * Writes single bytes of the current patch (reset, revert all, restore, undo). Each byte goes out with its
-   * whole parameter, one DT1 per parameter (same address and length as a knob write, so the queue's
-   * coalescing stays consistent). Bytes no writable parameter covers are skipped and counted. Returns null
-   * when writing is not allowed right now.
+   * Writes single bytes of the current patch (reset, undo). Each byte goes out with its whole parameter, one DT1
+   * per parameter (same address and length as a knob write, so the queue's coalescing stays consistent). Bytes
+   * no writable parameter covers are skipped and counted (PLAN 4.4). With `wholeBlocks`, each byte goes out
+   * with its whole block instead (revert all, restore: the bytes come from the amp's own stored slot or from
+   * what the amp reported, so bytes outside our list may be written too); only the two read-only blocks are
+   * skipped. Returns null when writing is not allowed right now.
    */
-  async writeBytes(changes: readonly ByteChange[]): Promise<WriteResult | null> {
+  async writeBytes(changes: readonly ByteChange[], wholeBlocks = false): Promise<WriteResult | null> {
     if (!this.canWrite()) return null;
     const s = this.stateValue;
     const generation = this.patchGeneration;
+    /** The unit a byte is written with: its parameter or its block (offset and length). */
+    const unitOf = (offset: Address): { at: Address; length: number } | undefined => {
+      if (wholeBlocks) {
+        const b = patchBlockAt(offset);
+        return b && !READ_ONLY_PATCH_OFFSETS.has(b.offset) ? { at: b.offset, length: b.length } : undefined;
+      }
+      const def = writableParamAt(offset);
+      return def && { at: def.at, length: encodingSize(def.encoding) };
+    };
     const target = new Map<Address, number>();
     let skipped = 0;
     for (const c of changes) {
-      if (!writableParamAt(c.offset) || !Number.isInteger(c.value) || c.value < 0 || c.value > 0x7f)
-        skipped++;
+      if (!unitOf(c.offset) || !Number.isInteger(c.value) || c.value < 0 || c.value > 0x7f) skipped++;
       else target.set(c.offset, c.value);
     }
     const previous: ByteChange[] = [];
     const runs = new Map<Address, number[]>();
-    for (const [offset, value] of [...target].sort((a, b) => a[0] - b[0])) {
+    for (const [offset, value] of [...target].sort((x, y) => x[0] - y[0])) {
       const old = s.current.read(offset, 1)?.[0];
       if (old === undefined || old === value) continue;
       previous.push({ offset, value: old });
-      const def = writableParamAt(offset);
-      if (!def) continue;
-      const run = runs.get(def.at) ?? [...(s.current.read(def.at, encodingSize(def.encoding)) ?? [])];
-      run[offset - def.at] = value;
-      runs.set(def.at, run);
+      const unit = unitOf(offset);
+      if (!unit) continue;
+      const run = runs.get(unit.at) ?? [...(s.current.read(unit.at, unit.length) ?? [])];
+      run[offset - unit.at] = value;
+      runs.set(unit.at, run);
     }
     await this.writeRuns([...runs].map(([offset, data]) => ({ offset, data })));
-    return { previous, skipped, generation };
+    return { previous, skipped, generation, wholeBlocks };
   }
 
   /** Double tap on a knob (rule 7): the parameter goes back to the stored value of the channel. */
@@ -403,12 +438,17 @@ export class AmpConnection {
     return this.writeBytes(stored.map((value, i) => ({ offset: def.at + i, value })));
   }
 
-  /** "Revert all" (rule 7): every byte that differs from the stored slot goes back to the stored value. */
+  /**
+   * "Revert all" (rule 7): every byte that differs from the stored slot goes back to the stored value, as whole
+   * blocks, so bytes outside our parameter list go back too (decided 2026-11-17; the read-only blocks are
+   * never written).
+   */
   async revertAll(): Promise<WriteResult | null> {
     const s = this.stateValue;
     if (!s.unsavedKnown) return null;
     return this.writeBytes(
       s.unsaved.map((offset) => ({ offset, value: s.stored.read(offset, 1)?.[0] ?? -1 })),
+      true,
     );
   }
 
@@ -420,7 +460,7 @@ export class AmpConnection {
     const index = this.stateValue.patchIndex;
     const changes = index === null ? undefined : this.stateValue.remembered.get(index);
     if (index === null || !changes) return null;
-    const result = await this.writeBytes(changes);
+    const result = await this.writeBytes(changes, true);
     if (result) {
       this.discardRemembered(index);
       this.addLog('info', `Restored ${result.previous.length} remembered bytes of ${slotName(index)}`);
@@ -431,7 +471,82 @@ export class AmpConnection {
   /** Undo of a reset, revert or restore: writes the previous values back, unless the patch changed since. */
   async undo(result: WriteResult): Promise<WriteResult | null> {
     if (result.generation !== this.patchGeneration || this.patchChangePending()) return null;
-    return this.writeBytes(result.previous);
+    return this.writeBytes(result.previous, result.wholeBlocks);
+  }
+
+  /**
+   * Saves the current patch onto its channel (rule 10), only after the user confirmed it. A1–B4 only, never the
+   * Panel or PREVIEW (the queue refuses those too). Locks writing, sends PATCH_WRITE with the channel's index,
+   * waits for the acknowledgement, reads the slot back and compares all 80 blocks with the patch as it was when
+   * saving started. The second acknowledgement the amp sends is ignored.
+   */
+  async save(): Promise<SaveResult> {
+    const queue = this.queue;
+    const s = this.stateValue;
+    const index = s.patchIndex;
+    if (
+      !queue ||
+      !this.canWrite() ||
+      this.patchChangePending() ||
+      index === null ||
+      !(SELECTABLE_CHANNELS as readonly number[]).includes(index)
+    )
+      return { kind: 'refused' };
+    const generation = this.patchGeneration;
+    const snapshot = s.current;
+    const name = slotName(index);
+    this.update({ saving: true });
+    this.addLog('info', `Saving onto ${name}`);
+    const done = (result: SaveResult): SaveResult => {
+      const text = {
+        saved: `Saved onto ${name} and checked: identical`,
+        mismatch: `Saved onto ${name}, but the slot differs${
+          result.kind === 'mismatch'
+            ? ` in ${result.blocks.length} block(s): ${result.blocks.join(', ')}`
+            : ''
+        }`,
+        'no-ack': `Saving onto ${name}: no acknowledgement from the amp`,
+        unchecked: `Saved onto ${name}, but reading it back failed`,
+        aborted: `Saving onto ${name} aborted (channel change or amp unplugged)`,
+        refused: '',
+      }[result.kind];
+      this.addLog(result.kind === 'saved' ? 'info' : 'error', text);
+      return result;
+    };
+    try {
+      const ack = this.waitForSaveAck(index);
+      try {
+        await queue.write(ADDR.patchWrite, u2x4.encode(index), { allowPatchWrite: true });
+      } catch (error) {
+        this.saveAck?.settle(false);
+        throw error;
+      }
+      const acknowledged = await ack;
+      if (generation !== this.patchGeneration || this.queue !== queue)
+        return done({ kind: 'aborted', index });
+      if (!acknowledged) {
+        void this.readStored(index); // so "unsaved" shows what the slot holds now
+        return done({ kind: 'no-ack', index });
+      }
+      this.discardRemembered(index);
+      this.storedGeneration++; // a background read of the slot is void
+      this.storedCollector = undefined;
+      const base = storedPatchAddress(index);
+      const reply = await queue.read(base, SIZE.patch);
+      if (generation !== this.patchGeneration) return done({ kind: 'aborted', index });
+      const slot = PatchImage.fromReply(reply.blocks, base);
+      if (!slot.complete) return done({ kind: 'unchecked', index });
+      this.update({ stored: slot, storedIndex: index });
+      this.updateUnsaved();
+      const blocks = [...new Set(snapshot.diff(slot).map((o) => blockKey(patchBlockAt(o)?.offset ?? o)))];
+      return done(blocks.length > 0 ? { kind: 'mismatch', index, blocks } : { kind: 'saved', index });
+    } catch (error) {
+      if (isCancelled(error) || generation !== this.patchGeneration) return done({ kind: 'aborted', index });
+      this.addLog('error', `Saving onto ${name}: ${describe(error)}`);
+      return done({ kind: 'unchecked', index });
+    } finally {
+      this.update({ saving: false });
+    }
   }
 
   /**
@@ -506,6 +621,22 @@ export class AmpConnection {
 
   // ---- internals ----
 
+  /** Resolves true on the acknowledgement of PATCH_WRITE for `index`, false on timeout, unplug or patch change. */
+  private waitForSaveAck(index: number): Promise<boolean> {
+    this.saveAck?.settle(false);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => this.saveAck?.settle(false), SAVE_ACK_TIMEOUT_MS);
+      this.saveAck = {
+        index,
+        settle: (ok) => {
+          clearTimeout(timer);
+          this.saveAck = undefined;
+          resolve(ok);
+        },
+      };
+    });
+  }
+
   /** Shows the bytes at once (rule 1), guards them (rule 2) and sends one DT1 per run. */
   private async writeRuns(runs: readonly { offset: Address; data: readonly number[] }[]): Promise<void> {
     const queue = this.queue;
@@ -558,6 +689,7 @@ export class AmpConnection {
         break;
       case 'detached':
         this.addLog('warn', 'Amp unplugged');
+        this.saveAck?.settle(false);
         this.queue?.close('amp unplugged');
         this.queue = undefined;
         clearTimeout(this.patchChangeTimer);
@@ -588,7 +720,9 @@ export class AmpConnection {
       return;
     }
     if (m.address === ADDR.patchWrite) {
-      this.onSaved(m.data);
+      const index = m.data.length === 2 ? u2x4.decode([...m.data]) : null;
+      if (this.saveAck && index === this.saveAck.index) this.saveAck.settle(true);
+      else if (!this.stateValue.saving) this.onSaved(m.data); // during our save: its second acknowledgement
       return;
     }
     if (this.storedCollector?.take(m.address, m.data)) return;
@@ -624,6 +758,7 @@ export class AmpConnection {
   private onPatchChange(data: readonly number[]): void {
     const index = data.length === 2 ? u2x4.decode([...data]) : null;
     this.addLog('info', `Patch change to ${slotName(index)}`);
+    this.saveAck?.settle(false);
     this.rememberLeftChannel(index);
     this.lastLocalWrite.clear(); // guards belong to the patch that was left
     this.patchGeneration++;

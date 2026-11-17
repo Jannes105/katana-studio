@@ -9,7 +9,6 @@ import {
   QueueTimeoutError,
   SendQueue,
   WriteBlockedError,
-  largeWriteGapMs,
   type Diagnostic,
 } from '../../src/protocol/queue';
 import { buildDt1, parseHex, parseMessage, type ParsedMessage } from '../../src/protocol/sysex';
@@ -189,6 +188,27 @@ describe('writes (rules 1–3)', () => {
     expect(transport.log()).toEqual(['DT1 20 00 06 00 = 10', 'DT1 20 00 58 01 = 43']);
   });
 
+  it('a waiting value is not replaced past a later whole block that covers it (the order stays)', async () => {
+    const { transport, queue } = await connected();
+    const nsBlock = addr(0x20, 0x00, 0x58, 0x00);
+    transport.hold();
+    const first = queue.write(GAIN, [10]); // in flight
+    await tick();
+    const w = [
+      queue.write(NS_THRESHOLD, [41]),
+      queue.write(nsBlock, [1, 50, 30]),
+      queue.write(NS_THRESHOLD, [42]),
+    ];
+    transport.release();
+    await Promise.all([first, ...w]);
+    expect(transport.log()).toEqual([
+      'DT1 20 00 06 00 = 10',
+      'DT1 20 00 58 01 = 41',
+      'DT1 20 00 58 00 = 1 50 30',
+      'DT1 20 00 58 01 = 42',
+    ]);
+  });
+
   it('writes of different length or address are not merged', async () => {
     const { transport, queue } = await connected();
     transport.hold();
@@ -211,27 +231,18 @@ describe('writes (rules 1–3)', () => {
     expect(transport.sent.map((s) => s.at)).toEqual([0, 0, 0].map(() => transport.sent[0]?.at));
   });
 
-  it('16 data bytes: no gap; 17 data bytes: BTS gap before the next message', async () => {
+  it('whole blocks go out without a gap too (protocol-notes 2.13, measured 2026-11-17)', async () => {
     const { transport, queue } = await connected();
-    const name = ADDR.currentPatch;
-    await queue.write(
-      name,
-      Array.from({ length: 16 }, () => 65),
-    );
-    await queue.write(GAIN, [1]);
-    expect((transport.sent[1]?.at ?? 0) - (transport.sent[0]?.at ?? 0)).toBe(0);
-
     const block = addr(0x20, 0x00, 0x1c, 0x00);
-    const big = queue.write(
-      block,
-      Array.from({ length: 17 }, () => 1),
-    );
-    const next = queue.write(GAIN, [2]);
-    await big;
-    const t0 = transport.sent[2]?.at ?? 0;
-    await tick(largeWriteGapMs(30) + 1); // message length 13 + 17 = 30
-    await next;
-    expect((transport.sent[3]?.at ?? 0) - t0).toBeGreaterThanOrEqual(largeWriteGapMs(30));
+    await Promise.all([
+      queue.write(
+        block,
+        Array.from({ length: 225 }, () => 1),
+      ),
+      queue.write(GAIN, [2]),
+    ]);
+    expect(transport.sent).toHaveLength(2);
+    expect(transport.sent[1]?.at).toBe(transport.sent[0]?.at);
   });
 });
 
@@ -376,6 +387,18 @@ describe('safety net (rule 8)', () => {
     expect(transport.sent).toEqual([]);
     await queue.write(ADDR.patchWrite, [0, 1], { allowPatchWrite: true });
     expect(transport.log()).toEqual(['DT1 7F 00 01 04 = 0 1']);
+  });
+
+  it('never sends PATCH_WRITE onto the Panel or PREVIEW, even when allowed', async () => {
+    const { transport, queue } = await connected();
+    for (const data of [[0, 0], [0, 9], [0, 8, 0], [1]]) {
+      await expect(queue.write(ADDR.patchWrite, data, { allowPatchWrite: true })).rejects.toBeInstanceOf(
+        WriteBlockedError,
+      );
+    }
+    expect(transport.sent).toEqual([]);
+    await queue.write(ADDR.patchWrite, [0, 8], { allowPatchWrite: true });
+    expect(transport.log()).toEqual(['DT1 7F 00 01 04 = 0 8']);
   });
 
   it('lets the current patch and the command area through', async () => {

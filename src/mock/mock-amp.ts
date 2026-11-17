@@ -7,6 +7,8 @@
 // - DT1 parameter writes are stored without echo and without acknowledgement (2.13)
 // - reports only with editor mode on (Q8): PATCH_SELECT burst (Q6), channel change, knob and save on the amp
 //   (Q1–Q3)
+// - PATCH_WRITE from the app: acknowledged twice at 7F 00 01 04, then the status bytes (2.15); faults for
+//   testing the app's checks can be switched on (saveFault)
 //
 // It only mirrors our assumptions, so tests against real captures (replay.ts) stay necessary (PLAN 4.7).
 
@@ -49,6 +51,9 @@ const OFFSET_SWITCHES = addr(0, 0, 0x08, 0x00); // 6 bytes: on/off; byte 4 is pr
 /** Switch byte of each of the five effects (reverb sits at 5, not 4). */
 const SWITCH_INDEX = [0, 1, 2, 3, 5] as const;
 
+/** Simulated faults of PATCH_WRITE from the app (PLAN 5, 1c: a simulated fault must show a message). */
+export type SaveFault = 'none' | 'no-ack' | 'wrong-content';
+
 export interface MockAmpOptions {
   /** Delay before the first message of a reply or report burst (real amp: about 3–5 ms). */
   readonly replyDelayMs?: number;
@@ -85,6 +90,11 @@ export class MockAmp implements Transport {
   editorMode = 0;
   /** When true, the amp answers nothing (cable pulled without detach, broken amp). */
   silent = false;
+  /**
+   * PATCH_WRITE from the app: 'no-ack' saves nothing and stays silent, 'wrong-content' saves, acknowledges, but
+   * one byte of the slot (NS threshold) ends up different.
+   */
+  saveFault: SaveFault = 'none';
   /** Every message the mock received, for assertions. */
   readonly received: MidiMessage[] = [];
 
@@ -258,10 +268,17 @@ export class MockAmp implements Transport {
     if (address === ADDR.patchWrite) {
       const index = u2x4.decode(data.slice(0, 2));
       if (index === PANEL_INDEX || index === PREVIEW_INDEX) return;
+      if (this.saveFault === 'no-ack') return;
       this.storePatch(index);
-      // PLAN 4.3: the amp acknowledges PATCH_WRITE with a DT1 at the same address (assumed for writes from the app).
-      if (this.editorMode)
-        this.emit([this.dt1(ADDR.patchWrite, data), ...this.statusBytes(5), ...this.statusBytes(4)]);
+      if (this.saveFault === 'wrong-content') {
+        const ns = storedPatchAddress(index) + addr(0, 0, 0x58, 0x01);
+        this.poke(ns, [((this.peek(ns, 1)?.[0] ?? 0) + 1) % 101]);
+      }
+      // protocol-notes 2.15: acknowledged twice at the same address, then the status bytes.
+      if (this.editorMode) {
+        const ack = this.dt1(ADDR.patchWrite, data);
+        this.emit([ack, ack, ...this.statusBytes(5), ...this.statusBytes(4)]);
+      }
       return;
     }
     // Parameter write: stored silently, no echo (2.13). Unknown addresses are ignored.

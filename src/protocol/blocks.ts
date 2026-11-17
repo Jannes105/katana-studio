@@ -82,6 +82,20 @@ export const PATCH_BLOCKS: readonly Block[] = rows([
   [0x01, 0x1e, 1, 1],
 ]);
 
+/**
+ * The two read-only blocks of a patch (PATCH_KNOB_READONLY, PATCH_KNOB_SOLO_DELAY_READONLY in the .tsl): positions
+ * of the knobs on the amp. Backed up, compared, but never written (PLAN 4.6).
+ */
+export const READ_ONLY_PATCH_OFFSETS: ReadonlySet<number> = new Set([
+  addr(0, 0x01, 0x1c, 0),
+  addr(0, 0x01, 0x1e, 0),
+]);
+
+/** The 78 blocks of a patch that may be written (whole-block writes: revert all, restore, PLAN 4.5). */
+export const WRITABLE_PATCH_BLOCKS: readonly Block[] = PATCH_BLOCKS.filter(
+  (b) => !READ_ONLY_PATCH_OFFSETS.has(b.offset),
+);
+
 /** The 21 blocks of SYSTEM (131 data bytes), measured 2026-11-15. */
 export const SYSTEM_BLOCKS: readonly Block[] = [
   1, 5, 2, 2, 2, 2, 11, 11, 11, 11, 11, 11, 3, 5, 5, 3, 1, 5, 1, 19, 9,

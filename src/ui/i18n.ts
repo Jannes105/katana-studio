@@ -72,7 +72,7 @@ const en = {
   'fact.model': 'Model',
   'fact.writing': 'Writing',
   'fact.writingLocked': 'locked (read-only)',
-  'fact.writingOn': 'on (current patch; saving comes later)',
+  'fact.writingOn': 'on (current patch, saving after confirmation)',
   'fact.app': 'App',
   'fact.language': 'Language',
   'backup.title': 'Backup',
@@ -99,6 +99,25 @@ const en = {
   'action.revertAll': 'Revert all to saved',
   'action.restore': 'Restore',
   'action.undo': 'Undo',
+  'action.save': 'Save to {slot}',
+  'action.ok': 'OK',
+
+  'save.title': 'Save to {slot}?',
+  'save.text':
+    '"{name}" replaces what is stored on {slot}. The old content of {slot} is then only in your backups.',
+  'save.noBackup': 'No backup from today yet. A backup takes about 3 s.',
+  'save.backupFirst': 'Back up first',
+  'save.withoutBackup': 'Save without backup',
+  'save.confirm': 'Save',
+  'save.cancel': 'Cancel',
+  'save.running': 'Saving…',
+  'save.saved': 'Saved to {slot} · checked',
+  'save.mismatch':
+    'After saving, {slot} differs from the app in {count} block(s). Check {slot} on the amp and save again.',
+  'save.noAck': 'The amp did not confirm saving to {slot}. Saved/Unsaved above shows what {slot} holds now.',
+  'save.unchecked': 'Saved to {slot}, but reading it back failed. Check with "Read again".',
+  'save.aborted': 'Saving to {slot} was interrupted (channel change or cable). Check {slot}.',
+  'save.refused': 'Saving is not possible right now.',
 
   'tab.probe': 'Rehearsal',
   'tab.fx': 'Effects',
@@ -118,6 +137,10 @@ const en = {
   'mock.channel': 'Channel on the amp',
   'mock.knob': 'Turn a knob on the amp',
   'mock.save': 'Save on the amp',
+  'mock.saveFault': 'Saving from the app',
+  'mock.faultNone': 'Normal',
+  'mock.faultNoAck': 'No acknowledgement',
+  'mock.faultWrong': 'Wrong content',
 } as const;
 
 export type TextKey = keyof typeof en;
@@ -194,7 +217,7 @@ const de: Record<TextKey, string> = {
   'fact.model': 'Modell',
   'fact.writing': 'Schreiben',
   'fact.writingLocked': 'gesperrt (nur lesend)',
-  'fact.writingOn': 'an (aktueller Patch; Speichern kommt später)',
+  'fact.writingOn': 'an (aktueller Patch, Speichern nach Bestätigung)',
   'fact.app': 'App',
   'fact.language': 'Sprache',
   'backup.title': 'Backup',
@@ -221,6 +244,26 @@ const de: Record<TextKey, string> = {
   'action.revertAll': 'Alles zurück auf gespeichert',
   'action.restore': 'Zurückholen',
   'action.undo': 'Rückgängig',
+  'action.save': 'Speichern auf {slot}',
+  'action.ok': 'OK',
+
+  'save.title': 'Auf {slot} speichern?',
+  'save.text':
+    '„{name}“ ersetzt, was auf {slot} gespeichert ist. Der alte Stand von {slot} steht danach nur noch in deinen Backups.',
+  'save.noBackup': 'Heute noch kein Backup. Ein Backup dauert etwa 3 s.',
+  'save.backupFirst': 'Erst sichern',
+  'save.withoutBackup': 'Ohne Backup speichern',
+  'save.confirm': 'Speichern',
+  'save.cancel': 'Abbrechen',
+  'save.running': 'Speichere…',
+  'save.saved': 'Auf {slot} gespeichert · geprüft',
+  'save.mismatch':
+    'Nach dem Speichern weicht {slot} in {count} Block/Blöcken von der App ab. {slot} am Amp prüfen und erneut speichern.',
+  'save.noAck':
+    'Der Amp hat das Speichern auf {slot} nicht bestätigt. Gespeichert/Ungespeichert oben zeigt, was jetzt auf {slot} liegt.',
+  'save.unchecked': 'Auf {slot} gespeichert, aber das Zurücklesen schlug fehl. Mit „Neu lesen“ prüfen.',
+  'save.aborted': 'Speichern auf {slot} unterbrochen (Kanalwechsel oder Kabel). {slot} prüfen.',
+  'save.refused': 'Speichern geht gerade nicht.',
 
   'tab.probe': 'Probe',
   'tab.fx': 'Effekte',
@@ -240,6 +283,10 @@ const de: Record<TextKey, string> = {
   'mock.channel': 'Kanal am Amp',
   'mock.knob': 'Regler am Amp drehen',
   'mock.save': 'Am Amp speichern',
+  'mock.saveFault': 'Speichern aus der App',
+  'mock.faultNone': 'Normal',
+  'mock.faultNoAck': 'Keine Quittung',
+  'mock.faultWrong': 'Falscher Inhalt',
 };
 
 export const TEXTS = { en, de } as const;

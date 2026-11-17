@@ -1,6 +1,6 @@
 # Read-only probe for the Katana Gen 3 on the Windows MIDI port "KATANA3".
 # Sends only the identity request and RQ1 (read) requests, except with -SelectTest, -EditorMode,
-# -WriteTest and -ParamTest (see the parameters below).
+# -WriteTest, -ParamTest, -BlockTest and -SaveTest (see the parameters below).
 # Usage:  powershell -File tools/katana-probe.ps1 [-IdleSeconds 60] [-OutDir captures]
 # BOSS Tone Studio and any browser tab using the port must be closed.
 param(
@@ -32,7 +32,21 @@ param(
   # patch is as before after restoring.
   [switch]$NoAsk,
   # With -ParamTest: also test knobs of other effect types (their bytes exist in the block whatever the type).
-  [switch]$AllTypes
+  [switch]$AllTypes,
+  # Writes: large DT1 (whole blocks, up to 225 bytes) into the current patch only (never PATCH_WRITE, never a
+  # stored slot). Writes blocks back unchanged (one, then all 78 writable ones in a burst without gap and with
+  # the BOSS Tone Studio gap), then one real change in a 17-byte and in a 225-byte block, each restored. At the
+  # end the whole patch must be as at the start (restored block by block if not). -NoAsk skips the backup
+  # question.
+  [switch]$BlockTest,
+  # Writes PATCH_WRITE: saves the current patch onto the current channel, only if it is A1..B4, only if
+  # -SaveTo names that channel (e.g. -SaveTo A2) and only if the current patch equals the stored slot (so the
+  # save changes nothing). Records the acknowledgement, reads the slot back and checks all ten slots.
+  [switch]$SaveTest,
+  [string]$SaveTo = '',
+  # With -SaveTest: afterwards NS threshold +-1, save, check, threshold back, save again, check (two more
+  # PATCH_WRITE). The slot must end exactly as at the start.
+  [switch]$SaveChange
 )
 $ErrorActionPreference = 'Stop'
 
@@ -258,7 +272,40 @@ function Ask([byte[]]$msg, [string]$label, [int]$first = 1500, [int]$silence = 3
   $got = $midi.Collect($first, $silence)
   foreach ($m in $got) { Record 'in' $m.T $m.Data }
   $dur = if ($got.Count) { $got[-1].T - $t0 } else { 0 }
-  [pscustomobject]@{ Messages = $got; Dt1 = @($got | ForEach-Object { ParseDt1 $_ } | Where-Object { $_ }); Ms = [math]::Round($dur, 1) }
+  [pscustomobject]@{ Messages = $got; Dt1 = @($got | ForEach-Object { ParseDt1 $_ } | Where-Object { $_ }); Ms = [math]::Round($dur, 1); T0 = $t0 }
+}
+
+# 4-byte 7-bit address of a linear address.
+function LinBytes([int]$n) { [byte[]]@([int]([math]::Floor($n / 2097152) % 128), [int]([math]::Floor($n / 16384) % 128), [int]([math]::Floor($n / 128) % 128), [int]($n % 128)) }
+# Range read; returns block data by linear offset from $addr (only DT1 inside the range).
+function ReadBlocks([byte[]]$addr, [string]$label, [byte[]]$size = (0, 2, 0, 0), [int]$silence = 300) {
+  $b = Lin $addr; $len = Lin $size; $map = @{}
+  foreach ($d in (Ask (Rq1 $addr $size) "RQ1 $label" 1500 $silence).Dt1) {
+    if ($d.Lin -ge $b -and $d.Lin -lt $b + $len) { $map[[int]($d.Lin - $b)] = $d.Data }
+  }
+  $map
+}
+# Offsets of blocks that differ or are missing on one side.
+function BlockDiff($x, $y) {
+  foreach ($k in (@($x.Keys) + @($y.Keys) | Sort-Object -Unique)) {
+    if (-not $x.ContainsKey($k) -or -not $y.ContainsKey($k) -or (Hex $x[$k]) -ne (Hex $y[$k])) { $k }
+  }
+}
+# Relative offset of a block inside a patch, from its 7-bit offset (e.g. 01 1C 00).
+function PatchOfs([int]$a, [int]$b, [int]$c) { Lin (0, $a, $b, $c) }
+function OfsHex([int]$o) { Hex ((LinBytes $o)[1..3]) }
+# The two read-only knob blocks (protocol-notes 2.12, PATCH_KNOB_READONLY, PATCH_KNOB_SOLO_DELAY_READONLY).
+$ReadOnlyOffsets = @((PatchOfs 1 0x1C 0), (PatchOfs 1 0x1E 0))
+$PatchBase = Lin (0x20, 0, 0, 0)
+$SlotNames = @('PANEL', 'A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'PREVIEW')
+# Stored slot of index n: PATCH(n+1) = 20 10 00 00 + n * 00 10 00 00 (protocol-notes 2.7).
+function SlotAddr([int]$n) { LinBytes ((Lin (0x20, 0x10, 0, 0)) + $n * (Lin (0, 0x10, 0, 0))) }
+$script:Results = [ordered]@{}
+function SaveResults([string]$kind) {
+  New-Item -ItemType Directory -Force $OutDir | Out-Null
+  $rf = Join-Path $OutDir ("{0}-{1}.json" -f $kind, (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  [ordered]@{ tool = "katana-probe.ps1 $kind"; at = (Get-Date).ToString('o'); results = $script:Results } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $rf
+  "Results saved: $rf"
 }
 function Summary($r) {
   $bytes = 0; $r.Dt1 | ForEach-Object { $bytes += $_.Data.Length }
@@ -287,7 +334,7 @@ try {
     "amp sent {0} message(s):" -f $w.Messages.Count
     $w.Messages | Select-Object -First 10 | ForEach-Object { "  " + (Hex ($_.Data | Select-Object -First 32)) }
     "after: " + (Hex (Ask (Rq1 (0x7F, 0, 0, 1) (0, 0, 0, 1)) 'RQ1 editor mode' 400 50).Dt1[0].Data)
-    if ($Listen -le 0) { return }
+    if ($Listen -le 0 -and -not ($BlockTest -or $SaveTest)) { return }
   }
 
   if ($Listen -gt 0) {
@@ -596,6 +643,152 @@ try {
     $rf = Join-Path $OutDir ("param-test-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     [ordered]@{ tool = 'katana-probe.ps1 -ParamTest'; at = (Get-Date).ToString('o'); results = $results } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $rf
     "Results saved: $rf"
+    return
+  }
+
+  if ($BlockTest) {
+    "`n== Block write test: whole blocks into the current patch (20 00 xx xx); never PATCH_WRITE, never a stored slot"
+    if (-not $NoAsk -and (Read-Host 'Complete backup made (app or BOSS Tone Studio)? [y/N]') -ne 'y') { 'Stopped: make a backup first.'; return }
+    $em = (Ask (Rq1 (0x7F, 0, 0, 1) (0, 0, 0, 1)) 'RQ1 editor mode' 400 50).Dt1[0].Data[0]
+    $start = ReadBlocks (0x20, 0, 0, 0) 'current patch (start)'
+    if ($start.Count -ne 80) { throw "current patch incomplete: $($start.Count) of 80 blocks" }
+    $writable = @($start.Keys | Sort-Object | Where-Object { $ReadOnlyOffsets -notcontains $_ })
+    $bytes = 0; foreach ($o in $writable) { $bytes += $start[$o].Length }
+    "editor mode $em; 80 blocks read, $($writable.Count) writable with $bytes data bytes (the two read-only knob blocks are left out)"
+    function BlockDt1([int]$o, [byte[]]$data) { Dt1 (LinBytes ($PatchBase + $o)) $data }
+    function ShowDiff($d) { if ($d.Count) { ($d | ForEach-Object { OfsHex $_ }) -join ', ' } else { 'none' } }
+    try {
+      # 1. One 225-byte block, unchanged.
+      $o = PatchOfs 0 0x1C 0
+      $w = Ask (BlockDt1 $o $start[$o]) 'DT1 block 1C 00 (225 bytes, unchanged)' 500 150
+      $d = @(BlockDiff $start (ReadBlocks (0x20, 0, 0, 0) 'current patch after one block'))
+      "`n1) one DT1 with 225 data bytes (block 1C 00, unchanged): amp sent $($w.Messages.Count) message(s); blocks different afterwards: $(ShowDiff $d)"
+      $script:Results['oneLargeBlock'] = [ordered]@{ ampMessages = $w.Messages.Count; blocksDifferent = @($d | ForEach-Object { OfsHex $_ }) }
+
+      # 2. All writable blocks unchanged, as a burst: no gap, then the BOSS Tone Studio gap after each large DT1.
+      foreach ($mode in 'no gap', 'BTS gap') {
+        foreach ($m in $midi.Drain()) { Record 'in' $m.T $m.Data }
+        Mark "burst of $($writable.Count) blocks, $mode"
+        $t0 = $midi.Now
+        foreach ($o in $writable) {
+          $msg = BlockDt1 $o $start[$o]; Record 'out' $midi.Now $msg; $midi.Send($msg)
+          if ($mode -eq 'BTS gap' -and $start[$o].Length -gt 16) { $until = $midi.Now + 20 + $msg.Length / 3.125; while ($midi.Now -lt $until) { } }
+        }
+        $sendMs = $midi.Now - $t0
+        $in = $midi.Collect(500, 200); foreach ($m in $in) { Record 'in' $m.T $m.Data }
+        $t1 = $midi.Now
+        $after = ReadBlocks (0x20, 0, 0, 0) "current patch after burst ($mode)"
+        $readMs = $midi.Now - $t1
+        $d = @(BlockDiff $start $after)
+        "2) burst, ${mode}: $($writable.Count) DT1 sent in {0:N0} ms, amp sent $($in.Count) message(s); read back $($after.Count) blocks in {1:N0} ms; blocks different: $(ShowDiff $d)" -f $sendMs, $readMs
+        $in | Select-Object -First 8 | ForEach-Object { "    " + (Hex ($_.Data | Select-Object -First 24)) }
+        $script:Results["burst $mode"] = [ordered]@{ blocks = $writable.Count; dataBytes = $bytes; sendMs = [math]::Round($sendMs, 1); ampMessages = $in.Count; readBackBlocks = $after.Count; readBackMs = [math]::Round($readMs, 1); blocksDifferent = @($d | ForEach-Object { OfsHex $_ }) }
+      }
+
+      # 3. A real change in a large DT1: delay feedback of the active variation (17-byte block), then restored.
+      #    4. The same in a 225-byte block: byte 183 of block 1C 00 (the amp reports its mod knob there, Q3).
+      $colour = [int]$start[(PatchOfs 0 0x04 0)][3]
+      $tests = @(
+        @{ Name = "delay feedback, variation $colour (17-byte block)"; Ofs = (PatchOfs 0 (0x28 + 2 * $colour) 0); Byte = 5; Max = 100 },
+        @{ Name = 'block 1C 00 byte 183 (225-byte block)'; Ofs = (PatchOfs 0 0x1C 0); Byte = 183; Max = 100 })
+      $n = 3
+      foreach ($t in $tests) {
+        $orig = [byte[]]$start[$t.Ofs]
+        $v0 = [int]$orig[$t.Byte]; $v1 = if ($v0 -lt $t.Max) { $v0 + 1 } else { $v0 - 1 }
+        $changed = [byte[]]$orig.Clone(); $changed[$t.Byte] = $v1
+        $w = Ask (BlockDt1 $t.Ofs $changed) "DT1 $($t.Name): byte $($t.Byte) $v0 -> $v1" 500 150
+        $after = ReadBlocks (0x20, 0, 0, 0) "current patch after change ($($t.Name))"
+        $d = @(BlockDiff $start $after)
+        $got = if ($after.ContainsKey($t.Ofs)) { [int]$after[$t.Ofs][$t.Byte] } else { -1 }
+        $only = ($d.Count -eq 1 -and $d[0] -eq $t.Ofs -and @(0..($orig.Length - 1) | Where-Object { $after[$t.Ofs][$_] -ne $changed[$_] }).Count -eq 0)
+        $null = Ask (BlockDt1 $t.Ofs $orig) "DT1 $($t.Name): restore" 500 150
+        $d2 = @(BlockDiff $start (ReadBlocks (0x20, 0, 0, 0) "current patch after restore ($($t.Name))"))
+        "$n) $($t.Name): $v0 -> $v1, read back $got, only this byte changed: $only, amp sent $($w.Messages.Count) message(s); after restoring blocks different: $(ShowDiff $d2)"
+        $script:Results["change $n"] = [ordered]@{ what = $t.Name; from = $v0; to = $v1; readBack = $got; onlyThisByte = $only; ampMessages = $w.Messages.Count; afterRestoreDifferent = @($d2 | ForEach-Object { OfsHex $_ }) }
+        $n++
+      }
+    }
+    finally {
+      $now = ReadBlocks (0x20, 0, 0, 0) 'current patch (end)'
+      $left = @(BlockDiff $start $now | Where-Object { $ReadOnlyOffsets -notcontains $_ })
+      if ($left.Count) {
+        "restoring $($left.Count) block(s): $(($left | ForEach-Object { OfsHex $_ }) -join ', ')"
+        foreach ($o in $left) { $null = Ask (BlockDt1 $o $start[$o]) "DT1 restore block $(OfsHex $o)" 200 50 }
+        $now = ReadBlocks (0x20, 0, 0, 0) 'current patch (after restoring)'
+      }
+      $end = @(BlockDiff $start $now)
+      "`nwhole patch as at the start: $(if ($end.Count) { 'NO, blocks ' + (($end | ForEach-Object { OfsHex $_ }) -join ', ') } else { 'yes (80 of 80 blocks)' })"
+      $script:Results['endDifferent'] = @($end | ForEach-Object { OfsHex $_ })
+      SaveResults 'block-test'
+    }
+    return
+  }
+
+  if ($SaveTest) {
+    "`n== Save test: PATCH_WRITE (DT1 7F 00 01 04) onto the current channel only"
+    $pn = (Ask (Rq1 (0, 0, 0, 0) (0, 0, 0, 2)) 'RQ1 patch number' 400 50).Dt1[0].Data
+    $n = [int]$pn[0] * 16 + [int]$pn[1]
+    $em = (Ask (Rq1 (0x7F, 0, 0, 1) (0, 0, 0, 1)) 'RQ1 editor mode' 400 50).Dt1[0].Data[0]
+    $ch = if ($n -ge 0 -and $n -le 9) { $SlotNames[$n] } else { "index $n" }
+    "current channel: $ch (index $n), editor mode $em"
+    if ($n -lt 1 -or $n -gt 8) { 'Stopped: only A1..B4 are saved by this test (never Panel or PREVIEW).'; return }
+    if ($SaveTo -ne $ch) { "Stopped: -SaveTo '$SaveTo' does not name the current channel $ch."; return }
+    $slotAddr = SlotAddr $n
+    $allSize = [byte[]](1, 0x20, 0, 0)
+    $cur0 = ReadBlocks (0x20, 0, 0, 0) 'current patch (start)'
+    $slot0 = ReadBlocks $slotAddr "stored $ch (start)"
+    $all0 = ReadBlocks (0x20, 0x10, 0, 0) 'all ten slots (start)' $allSize 500
+    if ($cur0.Count -ne 80 -or $slot0.Count -ne 80 -or $all0.Count -ne 800) { throw "incomplete read: current $($cur0.Count), slot $($slot0.Count), all slots $($all0.Count)" }
+    $d = @(BlockDiff $cur0 $slot0)
+    if ($d.Count) { "Stopped: the current patch differs from the stored $ch in $($d.Count) block(s) ($(($d | ForEach-Object { OfsHex $_ }) -join ', ')). This test saves only an unchanged patch."; return }
+    "current patch and stored $ch identical in 80 of 80 blocks"
+    $writeAddr = [byte[]](0x7F, 0, 1, 4)
+
+    function SaveOnce([string]$label, $expect) {
+      $w = Ask (Dt1 $writeAddr (0, $n)) "DT1 PATCH_WRITE $ch ($label)" 3000 400
+      "`n-- PATCH_WRITE 00 $('{0:X2}' -f $n) ($label): amp sent $($w.Messages.Count) message(s)"
+      $w.Messages | Select-Object -First 16 | ForEach-Object { "    +{0,6:N1} ms  {1}" -f ($_.T - $w.T0), (Hex ($_.Data | Select-Object -First 24)) }
+      $ack = @($w.Dt1 | Where-Object { $_.Lin -eq (Lin $writeAddr) }) | Select-Object -First 1
+      $ackMs = if ($ack) { [math]::Round($ack.T - $w.T0, 1) } else { $null }
+      "    acknowledgement at 7F 00 01 04: $(if ($ack) { (Hex $ack.Data) + " after $ackMs ms" } else { 'NONE' })"
+      $slot = ReadBlocks $slotAddr "stored $ch after save ($label)"
+      $cur = ReadBlocks (0x20, 0, 0, 0) "current patch after save ($label)"
+      $pnAfter = (Ask (Rq1 (0, 0, 0, 0) (0, 0, 0, 2)) 'RQ1 patch number' 400 50).Dt1[0].Data
+      $ds = @(BlockDiff $expect $slot); $dc = @(BlockDiff $expect $cur)
+      "    stored $ch equals the expected patch: $(if ($ds.Count) { 'NO, blocks ' + (($ds | ForEach-Object { OfsHex $_ }) -join ', ') } else { 'yes (80 of 80)' }); current patch unchanged: $(if ($dc.Count) { 'NO, blocks ' + (($dc | ForEach-Object { OfsHex $_ }) -join ', ') } else { 'yes' }); patch number after: $(Hex $pnAfter)"
+      $script:Results["save $label"] = [ordered]@{ ampMessages = @($w.Messages | ForEach-Object { [ordered]@{ ms = [math]::Round($_.T - $w.T0, 1); bytes = (Hex ($_.Data | Select-Object -First 24)) } }); ack = $(if ($ack) { Hex $ack.Data } else { $null }); ackMs = $ackMs; slotDifferent = @($ds | ForEach-Object { OfsHex $_ }); currentDifferent = @($dc | ForEach-Object { OfsHex $_ }); patchNumberAfter = (Hex $pnAfter) }
+    }
+
+    $saved = 0
+    try {
+      SaveOnce 'unchanged patch' $cur0
+      if ($SaveChange) {
+        $ns = PatchOfs 0 0x58 0
+        $v0 = [int]$cur0[$ns][1]; $v1 = if ($v0 -lt 100) { $v0 + 1 } else { $v0 - 1 }
+        $expect = @{}; foreach ($k in $cur0.Keys) { $expect[$k] = $cur0[$k] }
+        $nsNew = [byte[]]$cur0[$ns].Clone(); $nsNew[1] = $v1; $expect[$ns] = $nsNew
+        $null = Ask (Dt1 (0x20, 0, 0x58, 1) (, [byte]$v1)) "DT1 NS threshold $v0 -> $v1" 300 100
+        $saved = 1
+        SaveOnce "NS threshold $v1" $expect
+        $null = Ask (Dt1 (0x20, 0, 0x58, 1) (, [byte]$v0)) "DT1 NS threshold back to $v0" 300 100
+        SaveOnce "NS threshold back to $v0" $cur0
+        $saved = 0
+      }
+    }
+    finally {
+      if ($saved) {
+        # Something failed between the two saves: put the threshold back and save once more.
+        "`nrestoring NS threshold $v0 and saving again"
+        $null = Ask (Dt1 (0x20, 0, 0x58, 1) (, [byte]$v0)) "DT1 NS threshold back to $v0 (cleanup)" 300 100
+        $null = Ask (Dt1 $writeAddr (0, $n)) "DT1 PATCH_WRITE $ch (cleanup)" 3000 400
+      }
+      $all1 = ReadBlocks (0x20, 0x10, 0, 0) 'all ten slots (end)' $allSize 500
+      $da = @(BlockDiff $all0 $all1)
+      "`nall ten slots as at the start: $(if ($da.Count) { "NO, $($da.Count) block(s) differ" } else { "yes ($($all1.Count) blocks)" })"
+      $da | Select-Object -First 12 | ForEach-Object { "    slot {0}, block {1}" -f $SlotNames[[int][math]::Floor($_ / (Lin (0, 0x10, 0, 0)))], (OfsHex ($_ % (Lin (0, 0x10, 0, 0)))) }
+      $script:Results['allSlotsDifferent'] = $da.Count
+      SaveResults 'save-test'
+    }
     return
   }
 

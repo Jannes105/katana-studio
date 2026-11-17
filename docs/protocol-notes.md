@@ -209,10 +209,11 @@ check the model code (`06`), RQ1 editor level (expect `1`), DT1 editor mode on. 
 | `7F 00 00 02` | running mode | not used for the Gen 3 | [D] |
 | `7F 00 00 03` | revision | not used for the Gen 3 | [D] |
 | `7F 00 01 00` | PATCH_SELECT | DT1 with the patch index | [C 2026-11-15] for indexes 1–8, data `00 0n`; see Q6 for what the amp reports back |
-| `7F 00 01 04` | PATCH_WRITE | save the current patch; saving **on the amp** is reported here with the index as two nibbles | [C 2026-11-15] as a report (Q2); sending it from the PC is untested |
+| `7F 00 01 04` | PATCH_WRITE | DT1 `00 nn` saves the current patch into slot index `nn` (BOSS Tone Studio sends `00` + the index as one byte; for 1–8 the same as two nibbles), acknowledged by a DT1 at the same address; saving **on the amp** is reported here too | [C 2026-11-15] as a report (Q2); **[C 2026-11-17]** sent from the PC onto the current channel B4: acknowledged, slot verified (2.15). Saving onto another index than the current one is [D] and never done by us |
 | `7F 01 01 01` … `05` | five status bytes | reported on every patch change, save and colour change: colour of BOOSTER, MOD, FX, DELAY, REVERB (0–2), `03` = off | [C 2026-11-15], Q3 |
 | `7F 00 01 0E` | PATCH_CLEAR | clear a patch | [D], never sent |
-| unknown | EXPORT, PREVIEW_MUTE | sent by BOSS Tone Studio after saving and after restoring | [O] Q5; addresses not in our notes |
+| `7F 01 01 09` | PREVIEW_MUTE | 1 byte; BOSS Tone Studio sends `01` before EXPORT, `00` after a preview | [D] from BOSS Tone Studio, never sent; Q5 |
+| `7F 01 01 0A` | EXPORT | 2 bytes; BOSS Tone Studio sends `40 nn` after saving into `nn` (`7F 7F` after writing many slots) and waits for a DT1 reply there | [D] from BOSS Tone Studio, never sent; saving works without it (2.15), Q5 |
 
 - **Reading works without editor mode**: identity, patch name, patch number and editor level were all answered
   without switching it on. [C 2026-11-15]
@@ -344,9 +345,43 @@ nibbles, `00 08` for B4). `21 30 00 00` does not answer. TEMP `30 00 00 00` has 
 - The 20 ms gap of BOSS Tone Studio is not needed for small DT1 and RQ1. The queue sends at once and coalesces
   slider values per address; a slider naturally produces one value every 16–30 ms.
 - A reply describes the state at the moment the amp answers, not when the request was sent.
-- **Not tested:** large DT1 (whole blocks, up to 225 data bytes, as used for restoring a patch) and the same burst
-  over the phone's bulk endpoint, which may be faster than the PC driver. Until tested, large writes keep a gap
-  (check before Phase 1c), and the pair burst is repeated once with the test APK.
+- ~~Not tested: large DT1~~ measured 2026-11-17, see below. The same bursts over the phone's bulk endpoint
+  (which may be faster than the PC driver) are still to repeat once (test plan 1c).
+
+**Large DT1** (`katana-probe.ps1 -BlockTest -NoAsk`, 2026-11-17, PC, editor mode off, current patch B4 only;
+`captures/block-test-20261117-121657.json`, `katana-probe-20261117-121657.json`):
+
+| Test | Result |
+|---|---|
+| One DT1 with 225 data bytes (block `1C 00` written back unchanged) | accepted, nothing sent by the amp, all 80 blocks unchanged. [C 2026-11-17] |
+| All 78 writable blocks (2643 data bytes) written back unchanged as a burst **without any gap** | sent in 155 ms, nothing sent by the amp; a range read right after it returned all 80 blocks unchanged. [C 2026-11-17] |
+| The same with the BOSS Tone Studio gap (20 ms + length / 3.125 ms after each DT1 over 16 bytes) | 1736 ms, same result. [C 2026-11-17] |
+| A real change inside a whole-block DT1: delay feedback 22 → 23 (17-byte block, variation 0) and byte 183 of block `1C 00` 43 → 44 (225 bytes) | read back as written, **only that byte** of the patch changed; writing the original block restored the patch exactly. [C 2026-11-17] |
+
+**Decision:** the BOSS Tone Studio gap is not needed for large DT1 either. The queue sends whole blocks without a
+gap; a complete patch goes out in about 0.2 s on the PC.
+
+### 2.15 Saving from the app: PATCH_WRITE (2026-11-17)
+
+`katana-probe.ps1 -EditorMode 1 -SaveTest -SaveTo B4 [-SaveChange]`, PC, editor mode on, after a complete backup.
+The tool saves only onto the current channel (A1–B4), only when told its name, and only when the current patch
+equals the stored slot. Captures `save-test-20261117-121936.json`, `save-test-20261117-122125.json` and the
+`katana-probe-…` captures of the same minute.
+
+| Test | Result |
+|---|---|
+| PATCH_WRITE `00 08` (4 times) | acknowledged by DT1 `7F 00 01 04` = `00 08` after 1.6–2.1 ms, then **a second identical DT1** about 1.5 ms later; after about 86 ms the status burst `7F 01 01 01`…`05`, `01`…`04` as when saving on the amp (Q2). No patch number. [C 2026-11-17] |
+| Slot afterwards | equal to the current patch in 80 of 80 blocks; current patch and patch number unchanged. [C 2026-11-17] |
+| Real change: NS threshold 40 → 41 in the current patch, PATCH_WRITE; then 41 → 40, PATCH_WRITE | each time the slot held exactly the current patch; at the end all ten slots (800 blocks) were as before. [C 2026-11-17] |
+| PREVIEW_MUTE and EXPORT | not sent; saving worked without them. [C 2026-11-17] |
+
+Not measured: PATCH_WRITE with editor mode off (the app always has it on; the acknowledgement may then be missing,
+Q8), and on the phone.
+
+**Decisions for the app:** after PATCH_WRITE wait for the first DT1 at `7F 00 01 04` with the saved index
+(timeout 2 s) and ignore the second, then read the slot back and compare all 80 blocks with the patch at the time
+of saving. PATCH_WRITE only with the current channel's index; the queue refuses index 0 (Panel) and 9 (PREVIEW)
+even when PATCH_WRITE is allowed.
 
 ### 2.14 The .tsl file of BOSS Tone Studio (Gen 3)
 
@@ -468,6 +503,9 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
   in 80 of 80 blocks, and the slot holds the new gain (`21 10 06 00` = `59`). **Saving on the amp copies the
   current patch into the slot of the current channel.** [C 2026-11-15]
 
+  ***2026-11-17, PATCH_WRITE sent from the PC*** (2.15): the same reports, plus the acknowledgement at
+  `7F 00 01 04` arriving twice within 4 ms. [C 2026-11-17]
+
 ### Q3: Knobs and buttons on the amp: reported or not, which addresses?
 
 - **Procedure (read-only):** "Take snapshot A", marker with the name of the control, move exactly one control,
@@ -545,8 +583,8 @@ Experiments marked "write" need the full backup with BOSS Tone Studio first (PLA
 
 ### Q5: Effect of EXPORT and PREVIEW_MUTE (later)
 
-- **Status:** deferred. The addresses and value formats of these commands are not in our notes, and the capture
-  tool has no button for them (nor for PATCH_WRITE). They need the BOSS Tone Studio backup first.
+- **Status:** deferred to Phase 4. Addresses and values from local analysis of BOSS Tone Studio are in 2.9 [D].
+  Saving from the PC works without them [C 2026-11-17] (2.15), so Phase 1c does not send them.
 - **Procedure:** to be written once the addresses are known and Q1, Q2 and Q8 are answered. Outline: snapshot of
   all ten slots before and after each command, listen for muting, capture what the amp reports.
 - **Record:** what changes in the stored slots and in the PREVIEW slot (index 9), audible effect, messages from
@@ -669,7 +707,7 @@ same messages, and what happens with editor mode off.
 | Is the patch number at `00 00 00 00` really two nibble bytes, and how big is that block? | "Read patch number" on several channels; compare with the DT1 seen in Q1. |
 | Encoding of the PATCH_SELECT value (`u2x4` or `u2x7`) | Not distinguishable for indexes 1–8; note what the amp reports back after "Select patch". |
 | ~~Does the amp echo our own DT1 writes?~~ | **No**, with editor mode off and on (2.13). |
-| ~~Is the BTS send pacing needed over USB?~~ | **No** for small messages on the PC (2.13); large DT1 and the phone still to check. |
+| ~~Is the BTS send pacing needed over USB?~~ | **No** on the PC, for small messages and for whole blocks (2.13); the phone still to check once. |
 | Meaning of identity bytes 6–9 and 11–13 | Compare with another Katana model if one is ever at hand. |
 
 ## 6. Legal note
