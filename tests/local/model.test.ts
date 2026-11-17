@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { ADDR, PANEL_INDEX, PREVIEW_INDEX, storedPatchAddress } from '../../src/protocol/address';
 import { parseHex, parseMessage } from '../../src/protocol/sysex';
 import { parseCapture } from '../../src/mock/capture';
-import { AMP_TYPE_NAMES, EFFECTS, VARIATION_PARAMS } from '../../src/model/params';
+import { AMP_TYPE_NAMES, EFFECTS, PATCH_PARAMS, VARIATION_PARAMS } from '../../src/model/params';
 import { PatchImage, patchView, readRaw } from '../../src/model/patch';
 import { isCaptureFile } from '../helpers/capture-checks';
 
@@ -77,16 +77,17 @@ describe.skipIf(files.length === 0)('parameter list against real captures (local
     }
   });
 
-  it('every knob of booster, delay and reverb lies in its range, in all three variations', () => {
+  it('every parameter of the list lies in its range, in every variation (PLAN 5, Phase 2)', () => {
+    const numeric = [...PATCH_PARAMS, ...VARIATION_PARAMS].filter((d) => d.encoding !== 'ascii16');
+    const outside: string[] = [];
     for (const { file, label, image } of all) {
-      for (const def of VARIATION_PARAMS) {
+      for (const def of numeric) {
         const v = readRaw(image, def);
-        expect(v, `${file} ${label} ${def.key}`).toBeDefined();
-        expect(v, `${file} ${label} ${def.key}`).toBeGreaterThanOrEqual(def.min);
-        expect(v, `${file} ${label} ${def.key}`).toBeLessThanOrEqual(def.max);
+        if (v === undefined || v < def.min || v > def.max) outside.push(`${file} ${label} ${def.key} = ${v}`);
       }
     }
-  });
+    expect(outside.slice(0, 20)).toEqual([]);
+  }, 60_000);
 
   it('panel and preview slots are among them', () => {
     const labels = new Set(all.map((x) => x.label));

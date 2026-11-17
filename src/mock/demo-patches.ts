@@ -3,7 +3,8 @@
 // Laid out with our parameter list, so the mock follows the same (partly derived) offsets as the app.
 
 import { patchName, u4x4 } from '../protocol/encoding';
-import { instanceParam } from '../model/schema';
+import { instanceParam, type ParamDef } from '../model/schema';
+import { SECTION_PARAMS } from '../model/sections';
 import type { Address } from '../protocol/address';
 import {
   AMP_KNOBS,
@@ -13,6 +14,7 @@ import {
   AMP_RESONANCE,
   AMP_TYPE,
   AMP_VARIATION,
+  DELAY2,
   DELAY2_SWITCH,
   EFFECTS,
   NS_RELEASE,
@@ -173,6 +175,13 @@ const DEMO_KNOBS: Readonly<Record<string, number>> = {
   'reverb.springColor': 50,
 };
 
+/** A plausible value for a knob without a demo value: centre of a ± range, 50 of 0–100, else the minimum. */
+function plausible(p: ParamDef): number {
+  const centre = p.display?.rawOffset;
+  if (centre !== undefined && centre > 0) return centre;
+  return p.min === 0 && p.max === 100 ? 50 : p.min;
+}
+
 /** Writes a demo patch into memory at `base` (a stored slot or the current patch). */
 export function writeDemoPatch(
   poke: (address: Address, data: readonly number[]) => void,
@@ -189,20 +198,27 @@ export function writeDemoPatch(
   poke(base + AMP_POWERAMP_VARIATION.at, [odd ? 1 : 0]);
   poke(base + CONTOUR_SELECT.at, [odd ? 2 : 0]);
   poke(base + contourFreqShift(2).at, [odd ? 62 : 50]);
+  const put = (def: ParamDef, v: number) =>
+    poke(base + def.at, def.encoding === 'u4x4' ? u4x4.encode(v) : [v]);
   EFFECTS.forEach((g, k) => {
     poke(base + g.switch.at, [p.on[k] ?? 0]);
     poke(base + g.colour.at, [p.colours[k] ?? 0]);
     g.typeBlocks.forEach((at, c) => poke(base + at, [DEMO_TYPES[k]?.[c] ?? 0]));
+  });
+  for (const g of [...EFFECTS, DELAY2]) {
+    const demoKey = g.key === 'delay2' ? 'delay' : g.key;
     for (const c of [0, 1, 2]) {
-      for (const p of g.params) {
-        const def = instanceParam(g, c, p);
+      for (const q of g.params) {
         const v =
-          (DEMO_KNOBS[`${g.key}.${p.key}`] ?? p.min) + (p.key === 'time' && g.key === 'delay' ? 80 * c : 0);
-        poke(base + def.at, def.encoding === 'u4x4' ? u4x4.encode(v) : [v]);
+          (DEMO_KNOBS[`${demoKey}.${q.key}`] ?? plausible(q)) +
+          (q.key === 'time' && demoKey === 'delay' ? 80 * c : 0);
+        put(instanceParam(g, c, q), v);
       }
     }
-  });
+  }
+  DELAY2.typeBlocks.forEach((at, c) => poke(base + at, [c === 1 ? 3 : 0]));
   poke(base + DELAY2_SWITCH.at, [0]);
+  for (const q of SECTION_PARAMS) put(q, q.key === 'chain.variant' ? 2 : plausible(q));
   poke(base + NS_SWITCH.at, [p.ns[0]]);
   poke(base + NS_THRESHOLD.at, [p.ns[1]]);
   poke(base + NS_RELEASE.at, [p.ns[2]]);

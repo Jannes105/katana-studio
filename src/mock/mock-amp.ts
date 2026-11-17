@@ -47,7 +47,7 @@ export const MOCK_IDENTITY_REPLY: readonly number[] = [
 
 /** Offsets inside a patch the mock needs to know (protocol-notes 2.8). */
 const OFFSET_COLOURS = addr(0, 0, 0x04, 0x00); // 5 bytes: BOOSTER, MOD, FX, DELAY, REVERB colour 0–2
-const OFFSET_SWITCHES = addr(0, 0, 0x08, 0x00); // 6 bytes: on/off; byte 4 is presumably Delay 2
+const OFFSET_SWITCHES = addr(0, 0, 0x08, 0x00); // 6 bytes: on/off; byte 4 is Delay 2
 /** Switch byte of each of the five effects (reverb sits at 5, not 4). */
 const SWITCH_INDEX = [0, 1, 2, 3, 5] as const;
 
@@ -285,9 +285,29 @@ export class MockAmp implements Transport {
     if (this.blockContaining(address)) {
       try {
         this.poke(address, data);
+        if (data.length === 1) this.couple(address, data[0] ?? 0);
       } catch {
         // crosses a block boundary: the real amp's behaviour is unknown, the mock ignores it
       }
+    }
+  }
+
+  /**
+   * The amp keeps the Delay 2 switch and the layer mode of the active reverb variation consistent, silently
+   * (measured 2026-11-17: switch 0 → 1 set layer mode 2 → 1, layer mode 2 → 1 set the switch 0 → 1; the other
+   * directions are assumed to mirror that).
+   */
+  private couple(address: Address, value: number): void {
+    const base = ADDR.currentPatch;
+    const colour = this.peek(base + addr(0, 0, 0x04, 0x04), 1)?.[0] ?? 0;
+    const layer = base + addr(0, 0, 0x34 + 2 * colour, 0x01);
+    const delay2 = base + OFFSET_SWITCHES + 4;
+    if (address === delay2) {
+      const mode = this.peek(layer, 1)?.[0] ?? 2;
+      if (value === 1 && mode === 2) this.poke(layer, [1]);
+      if (value === 0 && mode !== 2) this.poke(layer, [2]);
+    } else if (address === layer) {
+      this.poke(delay2, [value === 2 ? 0 : 1]);
     }
   }
 

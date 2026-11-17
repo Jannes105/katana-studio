@@ -5,9 +5,12 @@
 
 import { addr, type Address } from '../protocol/address';
 import { instanceParam, type Instances, type ParamDef, type VariantGroup } from './schema';
+import { MOD_FX_PARAMS } from './modfx';
+import { SECTION_PARAMS } from './sections';
+import { HIGH_CUT, LOW_CUT, NORMAL_INVERSE, OFF_ON } from './tables';
 
 /** Model and date of the last check against the amp (PLAN 4.4: version reference). */
-export const PARAM_LIST_INFO = { model: 'KATANA-100 Gen 3', modelCode: 0x06, checked: '2026-11-16' } as const;
+export const PARAM_LIST_INFO = { model: 'KATANA-100 Gen 3', modelCode: 0x06, checked: '2026-11-17' } as const;
 
 /** Offset of a block inside the patch, written as in protocol-notes 2.12 (`b1 b2 00`). */
 function blk(b1: number, b2: number): Address {
@@ -259,48 +262,6 @@ function ms(key: string, label: string, byte: number, min: number, max: number, 
   };
 }
 
-const OFF_ON = ['Off', 'On'] as const;
-const NORMAL_INVERSE = ['Normal', 'Inverse'] as const;
-/** High cut of delay and reverb, raw 0–14. */
-const HIGH_CUT = [
-  '630 Hz',
-  '800 Hz',
-  '1.00 kHz',
-  '1.25 kHz',
-  '1.60 kHz',
-  '2.00 kHz',
-  '2.50 kHz',
-  '3.15 kHz',
-  '4.00 kHz',
-  '5.00 kHz',
-  '6.30 kHz',
-  '8.00 kHz',
-  '10.0 kHz',
-  '12.5 kHz',
-  'Flat',
-] as const;
-/** Low cut of the reverb, raw 0–17. */
-const LOW_CUT = [
-  'Flat',
-  '20.0 Hz',
-  '25.0 Hz',
-  '31.5 Hz',
-  '40.0 Hz',
-  '50.0 Hz',
-  '63.0 Hz',
-  '80.0 Hz',
-  '100 Hz',
-  '125 Hz',
-  '160 Hz',
-  '200 Hz',
-  '250 Hz',
-  '315 Hz',
-  '400 Hz',
-  '500 Hz',
-  '630 Hz',
-  '800 Hz',
-] as const;
-
 const table = (
   names: readonly string[],
   control: ParamDef['control'] = 'leds',
@@ -350,15 +311,19 @@ export const DELAY_PARAMS: readonly ParamDef[] = [
 
 const REVERB_SPRING = 3;
 
-/** Reverb block (13 bytes). Byte 1 is the layer mode (Delay 2 / both / reverb), Phase 2. */
+/** Reverb block (13 bytes). Byte 1 is the layer mode: Delay 2 only, both, or reverb only (Phase 2). */
 export const REVERB_PARAMS: readonly ParamDef[] = [
+  // The amp keeps layer mode and the Delay 2 switch (08 00 + 4) consistent: writing one changes the other.
   inst('layerMode', 'Layer Mode', 1, {
     ...table(['Delay 2', 'Both', 'Reverb']),
-    readonly: true,
-    status: 'D',
+    alsoChanges: [blk(0x00, 0x08) + 4],
   }),
-  // Shown 1–100 as in BOSS Tone Studio (raw = shown - 1).
-  inst('time', 'Time', 2, { max: 99, control: 'knob', display: { rawOffset: -1 } }),
+  // Shown 0.1–10.0 s as in BOSS Tone Studio (raw 0–99 = 0.1 s steps).
+  inst('time', 'Time', 2, {
+    max: 99,
+    control: 'knob',
+    display: { rawOffset: -1, factor: 0.1, decimals: 1, unit: 's' },
+  }),
   ms('preDelay', 'Pre Delay', 3, 0, 500, 1),
   inst('lowCut', 'Low Cut', 7, table(LOW_CUT, 'knob')),
   inst('highCut', 'High Cut', 8, table(HIGH_CUT, 'knob')),
@@ -391,6 +356,8 @@ function group(
   };
 }
 
+/** Mod and FX knobs: one layout for both, every type at its own offsets (modfx.ts, status D until checked). */
+
 export const EFFECTS: readonly VariantGroup[] = [
   group(
     'booster',
@@ -401,8 +368,24 @@ export const EFFECTS: readonly VariantGroup[] = [
     undefined,
     BOOSTER_PARAMS,
   ),
-  group('mod', 'Mod', { colour: 1, switch: 1 }, MOD_FX_TYPES, three(0x00, 0x10), three(0x00, 0x1c)),
-  group('fx', 'FX', { colour: 2, switch: 2 }, MOD_FX_TYPES, three(0x00, 0x16), three(0x00, 0x22)),
+  group(
+    'mod',
+    'Mod',
+    { colour: 1, switch: 1 },
+    MOD_FX_TYPES,
+    three(0x00, 0x10),
+    three(0x00, 0x1c),
+    MOD_FX_PARAMS,
+  ),
+  group(
+    'fx',
+    'FX',
+    { colour: 2, switch: 2 },
+    MOD_FX_TYPES,
+    three(0x00, 0x16),
+    three(0x00, 0x22),
+    MOD_FX_PARAMS,
+  ),
   group('delay', 'Delay', { colour: 3, switch: 3 }, DELAY_TYPES, three(0x00, 0x28), undefined, DELAY_PARAMS),
   // The reverb switch is byte 5; byte 4 is the Delay 2 switch (protocol-notes Q3).
   group(
@@ -416,8 +399,29 @@ export const EFFECTS: readonly VariantGroup[] = [
   ),
 ];
 
-/** Delay 2 switch (hangs on the reverb variation and its layer mode, PLAN 4.4). Not shown before Phase 2. */
-export const DELAY2_SWITCH = onOff('delay2', 'Delay 2', 4, 'D');
+/** Delay 2 switch (hangs on the reverb variation and its layer mode, PLAN 4.4). */
+export const DELAY2_SWITCH: ParamDef = {
+  ...onOff('delay2', 'Delay 2', 4),
+  // Writing it changes the layer mode of the active reverb variation (protocol-notes 2.8).
+  alsoChanges: three(0x00, 0x34).map((b) => b + 1),
+};
+
+/**
+ * Delay 2 (blocks 2E 00, 30 00, 32 00; same layout as delay). It has no colour of its own: the active variation
+ * is the reverb colour, and the reverb layer mode of that variation decides whether it sounds (PLAN 4.4). Not in
+ * EFFECTS, because it is no sixth effect on the amp. Checked on the amp 2026-11-17 (reverb variation 0).
+ */
+export const DELAY2: VariantGroup = {
+  key: 'delay2',
+  label: 'Delay 2',
+  switch: DELAY2_SWITCH,
+  colour: colour('reverb', 'Reverb', 4),
+  typeBlocks: three(0x00, 0x2e),
+  typeNames: DELAY_TYPES,
+  paramBlocks: three(0x00, 0x2e),
+  params: DELAY_PARAMS,
+  status: 'C',
+};
 
 /** The type byte of variation `colour` of an effect, as a parameter. */
 export function effectType(g: VariantGroup, colourValue: number): ParamDef {
@@ -434,7 +438,7 @@ export function effectType(g: VariantGroup, colourValue: number): ParamDef {
     display: { table: g.typeNames },
     // Writable only once the table of names exists (otherwise the range is unknown).
     readonly: g.typeNames.length === 0,
-    status: 'C',
+    status: g.status,
   };
 }
 
@@ -455,9 +459,13 @@ export const PATCH_PARAMS: readonly ParamDef[] = [
   contourFreqShift(3),
   ...EFFECTS.flatMap((g) => [g.switch, g.colour, effectType(g, 0), effectType(g, 1), effectType(g, 2)]),
   DELAY2_SWITCH,
+  effectType(DELAY2, 0),
+  effectType(DELAY2, 1),
+  effectType(DELAY2, 2),
+  ...SECTION_PARAMS,
 ];
 
 /** Every variation parameter of every effect, addressed per variation (instanceParam), for checks. */
-export const VARIATION_PARAMS: readonly ParamDef[] = EFFECTS.flatMap((g) =>
+export const VARIATION_PARAMS: readonly ParamDef[] = [...EFFECTS, DELAY2].flatMap((g) =>
   [0, 1, 2].flatMap((c) => g.params.map((p) => instanceParam(g, c, p))),
 );

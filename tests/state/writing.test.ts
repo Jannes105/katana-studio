@@ -6,7 +6,7 @@ import { ADDR, addr } from '../../src/protocol/address';
 import { parseMessage } from '../../src/protocol/sysex';
 import { MockAmp } from '../../src/mock/mock-amp';
 import { MockDevice } from '../../src/mock/mock-device';
-import { AMP_GAIN, EFFECTS, NS_THRESHOLD } from '../../src/model/params';
+import { AMP_GAIN, DELAY2_SWITCH, EFFECTS, NS_THRESHOLD } from '../../src/model/params';
 import { readRaw } from '../../src/model/patch';
 import { instanceParam } from '../../src/model/schema';
 import { AmpConnection, writableParamAt } from '../../src/state/connection';
@@ -22,7 +22,7 @@ const delay = EFFECTS.find((g) => g.key === 'delay');
 const timeDef = delay?.params.find((p) => p.key === 'time');
 if (!delay || !timeDef) throw new Error('no delay time');
 const DELAY_TIME = instanceParam(delay, 0, timeDef);
-/** A mod parameter byte (the mod knob moves 1D 37, protocol-notes Q3); not in our list yet. */
+/** A mod parameter byte (the mod knob moves 1D 37, protocol-notes Q3): chorus low rate of variation 0. */
 const MOD_BYTE = addr(0, 0, 0x1d, 0x37);
 
 async function started(amp = new MockAmp()) {
@@ -124,7 +124,8 @@ describe('writing: back to the stored state (rule 7)', () => {
   it('every byte of the parameter list belongs to at most one writable parameter', () => {
     expect(writableParamAt(NS_THRESHOLD.at)?.key).toBe('ns.threshold');
     expect(writableParamAt(DELAY_TIME.at + 3)?.key).toBe('delay.0.time');
-    expect(writableParamAt(MOD_BYTE)).toBeUndefined();
+    expect(writableParamAt(MOD_BYTE)?.key).toBe('mod.0.chorus.lowRate');
+    expect(writableParamAt(addr(0, 0, 0x3e, 0x06))).toBeUndefined(); // solo delay: not in our list
   });
 });
 
@@ -199,5 +200,23 @@ describe('writing: channel select by PATCH_SELECT', () => {
     await tick(SETTLE * 5);
     await backup;
     expect(amp.peek(NS)).toEqual([40]);
+  });
+});
+
+describe('writing: bytes the amp changes along (alsoChanges)', () => {
+  it('after writing the layer mode, the Delay 2 switch is read back and follows the amp', async () => {
+    const { amp, connection } = await started();
+    const reverb = EFFECTS.find((g) => g.key === 'reverb');
+    const layer = reverb?.params.find((p) => p.key === 'layerMode');
+    if (!reverb || !layer) throw new Error('no layer mode');
+    const colour = readRaw(connection.state.current, reverb.colour) ?? 0;
+    const def = instanceParam(reverb, colour, layer);
+    void connection.setValue(def, 1);
+    await tick(50);
+    expect(amp.peek(ADDR.currentPatch + DELAY2_SWITCH.at)).toEqual([1]);
+    expect(readRaw(connection.state.current, DELAY2_SWITCH)).toBe(1);
+    void connection.setValue(def, 2);
+    await tick(50);
+    expect(readRaw(connection.state.current, DELAY2_SWITCH)).toBe(0);
   });
 });

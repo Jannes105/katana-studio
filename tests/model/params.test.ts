@@ -4,6 +4,7 @@ import { PATCH_BLOCKS, blockKey } from '../../src/protocol/blocks';
 import {
   AMP_TYPE,
   AMP_TYPE_NAMES,
+  DELAY2,
   EFFECTS,
   NS_THRESHOLD,
   PATCH_NAME,
@@ -80,20 +81,22 @@ describe('parameter list (PLAN 4.4)', () => {
   });
 });
 
-describe('knobs of booster, delay and reverb (Phase 1b)', () => {
+describe('knobs of the effects with variations (Phase 1b; mod, FX and Delay 2 since Phase 2)', () => {
+  const GROUPS = [...EFFECTS, DELAY2];
   const byKey = (key: string) => {
-    const g = EFFECTS.find((e) => e.key === key);
+    const g = GROUPS.find((e) => e.key === key);
     if (!g) throw new Error(`no ${key}`);
     return g;
   };
 
   it('have unique keys per effect and lie inside their variation block, after the type byte', () => {
-    for (const g of EFFECTS) {
+    for (const g of GROUPS) {
       expect(new Set(g.params.map((p) => p.key)).size, g.key).toBe(g.params.length);
       for (const c of [0, 1, 2]) {
         const block = PATCH_BLOCKS.find((b) => b.offset === g.paramBlocks[c]);
         for (const p of g.params) {
-          expect(p.at, p.key).toBeGreaterThanOrEqual(1);
+          // Byte 0 is the type, except for mod and FX, whose type has a block of its own.
+          expect(p.at, p.key).toBeGreaterThanOrEqual(g.paramBlocks === g.typeBlocks ? 1 : 0);
           const q = instanceParam(g, c, p);
           if (block)
             expect(q.at + encodingSize(q.encoding), q.key).toBeLessThanOrEqual(block.offset + block.length);
@@ -132,7 +135,7 @@ describe('knobs of booster, delay and reverb (Phase 1b)', () => {
     const reverb = byKey('reverb').params;
     expect(reverb.find((p) => p.key === 'time')?.display?.rawOffset).toBe(-1);
     expect(reverb.find((p) => p.key === 'preDelay')?.encoding).toBe('u4x4');
-    expect(reverb.find((p) => p.key === 'layerMode')?.readonly).toBe(true);
+    expect(reverb.find((p) => p.key === 'layerMode')?.status).toBe('C');
     expect(byKey('booster').params.find((p) => p.key === 'bottom')?.display?.rawOffset).toBe(50);
   });
 
@@ -159,6 +162,40 @@ describe('knobs of booster, delay and reverb (Phase 1b)', () => {
   });
 });
 
+describe('mod and FX knobs (Phase 2)', () => {
+  const mod = EFFECTS.find((g) => g.key === 'mod');
+  const fx = EFFECTS.find((g) => g.key === 'fx');
+  if (!mod || !fx) throw new Error('no mod/fx');
+
+  it('share one list that fills the 225-byte block exactly once', () => {
+    expect(fx.params).toBe(mod.params);
+    const owner = new Array<string | undefined>(225);
+    for (const p of mod.params)
+      for (let i = 0; i < encodingSize(p.encoding); i++) {
+        expect(owner[p.at + i], `${p.key} overlaps`).toBeUndefined();
+        owner[p.at + i] = p.key;
+      }
+    expect(owner.filter((k) => k !== undefined)).toHaveLength(225);
+    expect(mod.params).toHaveLength(210);
+  });
+
+  it('every one of the 31 types has its knobs, each knob belongs to exactly one type', () => {
+    for (let t = 0; t < 31; t++) {
+      expect(mod.params.filter((p) => visibleFor(p, t)).length, mod.typeNames[t]).toBeGreaterThanOrEqual(2);
+    }
+    for (const p of mod.params) expect(p.visibleFor, p.key).toHaveLength(1);
+    const harmonist = mod.params.filter((p) => visibleFor(p, 12));
+    expect(harmonist).toHaveLength(33);
+  });
+
+  it('the knob reports of protocol-notes Q3 land on knobs of real types (mod 1D 37/3B, FX 23 19)', () => {
+    const at = (g: typeof mod, off: number) => g.params.find((p) => g.paramBlocks[0] + p.at === off)?.key;
+    expect(at(mod, addr(0, 0, 0x1d, 0x37))).toBe('chorus.lowRate');
+    expect(at(mod, addr(0, 0, 0x1d, 0x3b))).toBe('chorus.highRate');
+    expect(at(fx, addr(0, 0, 0x23, 0x19))).toBe('tremolo.rate');
+  });
+});
+
 describe('writable (PLAN 4.4: only confirmed addresses are written)', () => {
   it('needs status C and no read-only flag; the name is writable since 1c', () => {
     expect(writable(NS_THRESHOLD)).toBe(true);
@@ -168,11 +205,9 @@ describe('writable (PLAN 4.4: only confirmed addresses are written)', () => {
   });
 });
 
-describe('status after the address check on the amp (2026-11-16)', () => {
-  it('everything of Phase 1b and the name are writable; only layer mode and the Delay 2 switch stay locked', () => {
-    const locked = [...PATCH_PARAMS, ...VARIATION_PARAMS]
-      .filter((p) => !writable(p))
-      .map((p) => p.key.replace(/^reverb\.\d\./, 'reverb.n.'));
-    expect([...new Set(locked)].sort()).toEqual(['delay2.on', 'reverb.n.layerMode']);
+describe('status after the address checks on the amp (2026-11-16 and 2026-11-17)', () => {
+  it('everything in the list is checked and writable (the solo delay is not in it: KATANA Artist only)', () => {
+    for (const p of [...PATCH_PARAMS, ...VARIATION_PARAMS]) expect(writable(p), p.key).toBe(true);
+    expect([...PATCH_PARAMS].some((p) => p.key.startsWith('solo.delay.'))).toBe(false);
   });
 });

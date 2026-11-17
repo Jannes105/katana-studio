@@ -157,6 +157,57 @@ Parameter names are our own. The full parameter list will be our own table in `s
 | `5A 00` | send/return | | [D] |
 | `5C 00` ff. | assigns | | [D] |
 
+**Blocks for Phase 2** (local analysis of BOSS Tone Studio, 2026-11-17; names as in the `.tsl` file, 2.14).
+Byte offsets from the block start; raw ranges. **[C 2026-11-17]** for everything in this table except the solo
+delay (KATANA Artist only, see below): `katana-probe.ps1 -ParamTest -NoAsk -AllTypes -Status D` (PC, current patch only, no PATCH_WRITE, after a
+complete backup; `captures/param-test-20261117-143857.json`): 538 addresses, mod and FX in variation 0, Delay 2
+in reverb variation 0, contour in the selected contour. 525 were written, read back, changed no other byte and
+were restored; the whole patch was as before after each one. Nobody listened; the meaning rests on the layout
+of BOSS Tone Studio. Our list was also compared entry by entry with its address map (1535 entries including all
+variations: same block, offset, encoding and range).
+
+- **Delay 2 switch and layer mode are coupled** [C 2026-11-17]: writing the switch `08 00` + 4 from 0 to 1 also
+  set the layer mode of reverb variation 0 (`34 00` + 1) from 2 (reverb) to 1 (both); writing the layer mode from
+  2 to 1 also set the switch from 0 to 1. Restoring either restored both. The amp did not send anything for the
+  coupled byte (editor mode was on, nothing else was listened for); the app reads the coupled byte back after
+  writing (`alsoChanges` in the parameter list). The other directions (layer mode 0, switch 1 → 0) are not
+  measured.
+- **Solo delay `3E 00` ignores writes** [C 2026-11-17]: all 11 parameters read back unchanged after a DT1 of one
+  parameter, nothing else changed (solo was off). Same with **solo on** (`-Set 'solo.on=1'`, restored after)
+  and with a **whole-block DT1** of all 14 bytes (`-WholeBlock`; send level as control in the same run was
+  taken): `captures/param-test-20261117-144802.json`, `…144822.json`. In every capture the block holds BOSS Tone
+  Studio's defaults (on 0, carry-over 1, 400 ms, feedback 22, effect level 50, …), in some stored slots with
+  effect level 0, so it can change somehow, but not by DT1 into the current patch. How BOSS Tone Studio or the
+  amp sets it is open. **Explanation** (owner's remark, then local analysis): BOSS Tone Studio shows the solo
+  delay only for the KATANA Artist; its model table switches it off for the KATANA-100 (and 50, 212, head). The
+  block is part of every Gen 3 patch because the format is shared. So the KATANA-100 has no solo delay; the
+  block is not in our list and the app neither shows nor writes it (backups and `.tsl` keep it as raw bytes).
+
+| Block | `.tsl` name | Bytes | Content |
+|---|---|---|---|
+| `02 00` | OTHER | 3 | +0 chain variant 0–8, +1 cabinet resonance 0–2, +2 master key 0–11 (harmonist) |
+| `08 00` + 4 | SW | 1 | Delay 2 on/off |
+| `1C 00` … `20 00` | FX_DETAIL(1–3) | 225 | mod variations 0–2: the parameters of all 31 types at fixed offsets (210 parameters: 205 × `u7` and 5 × `u4x4`, namely pre delay 1/2 of pitch shifter and harmonist, 0–300 ms, and the DC-30 echo repeat rate, 40–600) |
+| `22 00` … `26 00` | FX_DETAIL(4–6) | 225 | FX variations 0–2, same layout as mod |
+| `2E 00` … `32 00` | DELAY(4–6) | 17 | Delay 2, one block per **reverb** variation, same layout as delay |
+| `34 00` … `38 00` + 1 | REVERB | 1 | layer mode 0 Delay 2, 1 both, 2 reverb |
+| `3A 00` | SOLO_COM | 2 | +0 solo on/off, +1 effect level 0–100 |
+| `3C 00` | SOLO_EQ | 10 | +0 position 0/1, +1 on/off, +2 low cut 0–17, +3 low gain (raw = shown + 24), +4 mid freq 0–27, +5 mid Q 0–5, +6 mid gain, +7 high gain (±24), +8 high cut 0–14, +9 level (±24) |
+| `3E 00` | SOLO_DELAY | 14 | **KATANA Artist only, not used by the KATANA-100.** +0 on/off, +1 carry-over 0/1, +2…5 time `u4x4` 1–2000 ms, +6 feedback, +7 effect level 0–120, +8 direct level, +9 filter 0–2, +10 high cut 0–14, +11 mod on/off, +12 mod rate, +13 mod depth |
+| `42 00` … `46 00` + 0 | CONTOUR(1–3) | 1 | contour type 0–3 |
+| `48 00` | PEDALFX_COM | 3 | +0 position 0/1, +1 on/off, +2 type 0–2 |
+| `4A 00` | PEDALFX | 15 | pedal wah (+0 wah type 0–5, +1 pedal position, +2 min, +3 max, +4 effect level, +5 direct mix), pedal bend (+6 pitch ±24, +7 pedal position, +8 effect level, +9 direct mix), wah 95E (+10 pedal position, +11 min, +12 max, +13 effect level, +14 direct mix) |
+| `4C 00`, `4E 00` | EQ_EACH(1, 2) | 3 | EQ 1 / EQ 2: +0 position 0/1 (before/after the amp), +1 on/off, +2 type 0 parametric, 1 graphic |
+| `50 00`, `52 00` | EQ_PEQ(1, 2) | 11 | +0 low cut 0–17, +1 low gain (±20), +2 low-mid freq 0–27, +3 low-mid Q 0–5, +4 low-mid gain, +5 high-mid freq, +6 high-mid Q, +7 high-mid gain, +8 high gain, +9 high cut 0–14, +10 level (all gains ±20, raw = shown + 20) |
+| `54 00`, `56 00` | EQ_GE10(1, 2) | 11 | 31 Hz … 16 kHz and level, ±24 (raw = shown + 24) |
+| `5A 00` | SENDRETURN | 5 | +0 on/off, +1 position 0–2, +2 mode 0/1, +3 send level, +4 return level |
+
+**Chain:** BOSS Tone Studio builds the order from five values: the chain variant (`02 00` + 0, 0–8), the pedal FX
+position (`48 00` + 0), the send/return position (`5A 00` + 1) and the two EQ positions (`4C 00` + 0, `4E 00` +
+0). The variant sets where booster, mod, FX and Delay 1 sit relative to the amp (9 orders, e.g. variant 2:
+booster, mod, FX, amp); the positions place pedal FX, send/return and the EQs. Our own table of the orders goes
+into `src/model/`. [D]
+
 Type ranges (by analysis, 2026-11-16, consistent with every stored slot in the captures): booster 0–22, mod and FX
 0–30 (one list), delay 0–7, reverb 0–4, amp type 0–5. The names are in our own tables in `src/model/params.ts`.
 
@@ -191,8 +242,11 @@ Ranges are raw values; "shown" is raw minus the offset.
 | reverb | 10, 11 | effect level, direct mix | 0–100 | |
 | reverb | 12 | spring color | 0–100 | SPRING only |
 
-**Checking a [D] address on the amp:** `tools/katana-probe.ps1 -ParamTest` (optionally `-Only <regex>`) goes
-through the list in the current patch: read, write a nearby value, read back, ask whether the change was heard or
+**Checking a [D] address on the amp:** `npm run params:export` writes our parameter list from `src/model` to
+`tools/param-list.json` (generated, git-ignored; since Phase 2, before that the probe had its own copy).
+`tools/katana-probe.ps1 -ParamTest` (optionally `-Only <regex>`, `-Status D`, `-Set 'key=value'` to set patch
+parameters first and restore them at the end, `-WholeBlock` to write each value as a DT1 of its whole block)
+goes through that list in the current patch: read, write a nearby value, read back, ask whether the change was heard or
 seen, write the original value back and read again. Variation parameters use the active variation. Results go to
 `captures/param-test-<time>.json`. The app writes only parameters marked [C] (`writable()` in
 `src/model/schema.ts`), so every address passes this check before the app can change it.

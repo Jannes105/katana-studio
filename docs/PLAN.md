@@ -715,8 +715,85 @@ Endstufe. Schnellschalter und Speicherknöpfe sitzen unten unter dem Daumen. Der
 Browser von 360×640 bis 412×915 ohne Scrollen. Version 0.4.2.
 
 ### Phase 2 – Alle Klangparameter
-- Alle Effekttypen mit allen Parametern, alle Variationen.
-- Contour, Pedal FX, Solo, Send/Return, EQ (parametrisch und 10-Band), Effektkette.
+
+*Entwurf 17.11.2026, noch nicht abgestimmt.* Ziel: Jeder Klangparameter eines Patches, den BTS zeigt, lässt sich in
+der App lesen und einstellen. **Nicht** in Phase 2: Assigns, Expression, GA-FC (Phase 3), System (Phase 3).
+
+**Umfang** (Blöcke laut BTS-Analyse zugeordnet, `protocol-notes.md` 2.8 „Blocks for Phase 2“, alles noch [D]):
+
+| Bereich | Blöcke | Neue Adressen (eine Variation) |
+|---|---|---|
+| Mod und FX, alle 31 Typen | `1C 00`–`26 00`, je Variation 225 Bytes, gleiche Vorlage für Mod und FX | 210 (205 × 1 Byte, 5 × `u4x4`), dazu Master Key (`02 00` + 2, für Harmonist) |
+| Delay 2 und Layer Mode | `2E 00`–`32 00` (Vorlage wie Delay, Variation = **Reverb**-Farbe), Schalter `08 00` + 4, Layer Mode je Reverb-Variation | 14 + 2 |
+| Solo | `3A 00`, `3C 00` (Solo-EQ); `3E 00` (Solo-Delay) gibt es nur beim KATANA Artist | 12 |
+| Pedal FX | `48 00` (Position, an/aus, Typ Wah/Bend/Wah 95E), `4A 00` | 18 |
+| EQ 1 und EQ 2 | je `4C`/`4E 00` (Position, an/aus, Typ parametrisch/10-Band), `50`/`52 00` (PEQ), `54`/`56 00` (GEQ) | 50 |
+| Send/Return | `5A 00` | 5 |
+| Effektkette | Kettenvariante `02 00` + 0 (0–8) und die Positionen von Pedal FX, Send/Return, EQ 1, EQ 2 | 1 (+ Positionen oben) |
+| Contour (Rest), Cabinet Resonance | Contour-Typ je Contour (`42`–`46 00` + 0), `02 00` + 1 | 4 |
+
+Zusammen rund **320 Adressen**. Variationen 1 und 2 haben dieselbe Vorlage wie Variation 0 (wie in 1b).
+
+**Regeln wie bisher:** eigene Tabellen in `src/model/` (Lagen, Bereiche, Versatz, Anzeige, Sichtbarkeit je Typ,
+Umrechnungstabellen wie Frequenzen, Q, Notenwerte, Harmonist-Stufen), keine Roland-Dateien im Repo. Jeder Wert in
+allen Mitschnitten muss in den Bereichen liegen (Test). Neue Parameter sind gesperrt, bis `-ParamTest` sie auf [C]
+bringt. Der Probe-Tab bleibt, wie er ist.
+
+**Bedienung (Vorschlag, wird vor PR 2 mit klickbaren Entwürfen abgestimmt):**
+- **Effekte-Tab in Kettenreihenfolge:** Die Liste zeigt die Blöcke so, wie das Signal läuft (Pedal FX, Booster,
+  Mod, EQ, Amp, FX, Send/Return, Delay, Delay 2, Reverb …), jede Zeile wie bisher mit LED, „Farbe · Typ“ und
+  Schalter. Oben ein Eintrag „Kette“, der die Reihenfolge ändert (Auswahl der 9 Varianten und der Positionen, als
+  eigene schlichte Blockgrafik, nicht die von BTS). Solo und Noise Suppressor stehen unter der Kette.
+- **Mod/FX-Seite** (Harmonist hat 33 Regler, die meisten Typen 3–13): drei Richtungen zum Vergleich:
+  **A Seiten** (je Seite höchstens 6 Regler im 3×2-Raster, wischen oder Punkte unten; Typen mit ≤ 6 Reglern
+  haben eine Seite), **B Gruppen** (Abschnitte wie „Voice 1 · Voice 2 · Mix“ oder „Low · High“, nur einer offen),
+  **C kompakte Zeilen** (waagerechte Balken, 8–10 Zeilen ohne Scrollen, Antippen öffnet den großen Regler unten).
+  Gruppen und Seiteneinteilung kommen aus unserer Liste (`group`), nicht aus BTS.
+- **Delay 2** als zweiter Reiter auf der Delay-Seite, Layer Mode auf der Reverb-Seite. **EQ** mit Umschalter
+  PEQ/GEQ; der GEQ als 11 senkrechte Schieber. **Pedal FX, Solo, Send/Return** als eigene Seiten im selben Stil.
+
+*Fertig, wenn:* alle Parameter der Tabelle oben in der Liste stehen, am Amp mit `-ParamTest` geprüft sind ([C]),
+jeder Wert in den Mitschnitten in den Bereichen liegt, ein in der App eingestellter Patch in BTS dieselben Werte
+zeigt (Stichprobe je Bereich, über `.tsl`-Import), „Alles zurück“ und Speichern auch Mod/FX-Regler erfassen und
+der Testplan `docs/testplan/phase-2.md` am Amp durch ist.
+
+*Pull Requests (Vorschlag):* drei, wie in 1b.
+1. **Modell und Adressprüfung:** Liste um alle Bereiche erweitern (mit Gruppen für die Bedienung und
+   Anzeigetabellen), Test gegen die Mitschnitte, Kettentabelle, Demo-Patches im Mock, Prüfwerkzeug für die neuen
+   Blöcke; Lauf am Amp (`-ParamTest -NoAsk -AllTypes`, Mod und FX je in Variation 0, Delay 2 in Reverb-Variation 0),
+   Ergebnisse als [C] in `protocol-notes.md`. Ohne neue Oberfläche.
+2. **Mod/FX und Delay 2:** zuerst Entwürfe A/B/C klickbar im Browser (Mock, nur Dev-Server, danach gelöscht),
+   entscheiden, dann die Mod/FX-Seite mit Reglern je Typ, Delay 2 und Layer Mode.
+3. **Kette, EQ, Pedal FX, Solo, Send/Return und Abschluss:** Effekte-Tab in Kettenreihenfolge mit Kette ändern,
+   die neuen Seiten, Contour-Typ und Cabinet Resonance in „Mehr“, Testplan `docs/testplan/phase-2.md`,
+   Version 0.5.0, Release nach deinem Ja.
+
+**Offen vor dem Start:** Abschnitt 6 von `docs/testplan/phase-1c.md` (Probe-Tab seit v0.4.2) am Handy.
+
+*Abgestimmt 17.11.2026:* Umfang und die drei PRs wie oben.
+
+*Stand Phase 2:* PR 1 (17.11.2026, Branch `claude/phase-2-model`): **Liste.** `src/model/modfx.ts` (alle 210
+Mod/FX-Parameter, eine Liste für Mod und FX, mit Sichtbarkeit je Typ, Anzeigetabellen und Gruppen wie „Voice 1“
+oder „Low“ für die spätere Bedienung), `src/model/sections.ts` (Solo mit EQ, Pedal FX, EQ 1/2,
+Send/Return, Kettenvariante, Cabinet Resonance, Master Key, Contour-Typ), Delay 2 als eigene Variationsgruppe
+(`DELAY2`, Farbe = Reverb-Farbe), Layer Mode, `src/model/chain.ts` (Reihenfolge der Kette aus Variante und
+Positionen), gemeinsame Tabellen in `src/model/tables.ts`. Schema: `group`, `decimals` (Reverb-Zeit jetzt
+0,1–10,0 s wie BTS) und `alsoChanges`. **Prüfungen:** Jeder Wert in allen Mitschnitten liegt in den Bereichen
+(alle Parameter, alle Variationen); lokal Eintrag für Eintrag mit der Adressliste von BTS verglichen (1535 von
+1535 gleich in Block, Offset, Kodierung, Bereich) und die Kettenregeln mit allen 216 Kombinationen von BTS.
+**Prüfwerkzeug:** `-ParamTest` liest die Liste jetzt aus `tools/param-list.json` (`npm run params:export`,
+erzeugt, nicht im Repo), neu `-Status D`. **Lauf am Amp** (17.11.2026, Claude am PC, nach Komplett-Backup aus
+der App, nur aktueller Patch, kein `PATCH_WRITE`): 538 Adressen, 525 einwandfrei. Delay-2-Schalter und Layer
+Mode sind am Amp **gekoppelt** (der Amp stellt den anderen Wert selbst nach); die App liest das gekoppelte Byte
+nach dem Schreiben neu (`alsoChanges`, im Mock nachgebildet). Das **Solo-Delay** (`3E 00`) nimmt keine
+Schreibbefehle an, auch nicht mit Solo an und nicht als ganzer Block (eigener Versuch, neue Schalter `-Set` und
+`-WholeBlock` im Prüfwerkzeug); **Erklärung** (dein Hinweis, dann in der BTS-Analyse
+bestätigt): BTS zeigt das Solo-Delay nur beim KATANA Artist; beim KATANA-100 schaltet seine Modelltabelle es
+ab. Der Block steht nur wegen des gemeinsamen Formats in jedem Patch. Das Solo-Delay ist deshalb **nicht in
+unserer Liste** (Backups und `.tsl` behalten den Block roh). Alles andere ist [C]
+(`protocol-notes.md` 2.8). **Folge für die Oberfläche:** Die Effekt-Seite zeigt Mod und FX jetzt schon mit den
+Reglern des aktiven Typs in der bisherigen einfachen Form (Regler, dann Auswahl), schreibbar; das richtige
+Bedienkonzept kommt mit PR 2. Im Browser mit dem Mock geprüft.
 
 ### Phase 3 – Steuerung und System
 - Schema-Probe für Assigns zuerst (siehe 4.4).
