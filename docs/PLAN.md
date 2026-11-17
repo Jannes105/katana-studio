@@ -373,7 +373,8 @@ gespeicherten Platz des Amps oder aus seinen eigenen Meldungen. `undo` schreibt 
   aktuelle Patch, drei Bereichsanfragen; unvollständig, Kabelzug oder Kanalwechsel bricht ab, ohne Datei.
   Export über das Teilen-Menü (`@capacitor/filesystem` schreibt in den Cache, `@capacitor/share` teilt;
   `src/storage/files-android.ts`), im Browser als Download. Zusätzlich „Diesen Patch sichern“ als Patch-Datei aus
-  dem Spiegel, ohne Lesen. Knöpfe im Verbindungsfenster. Zurückspielen kommt mit 1c.
+  dem Spiegel, ohne Lesen. Knöpfe im Verbindungsfenster. Zurückspielen seit 1c (PR 2): ein Patch aus Backup,
+  Patch-Datei oder `.tsl` in den aktuellen Patch eines Kanals, dann Speichern wie üblich (Phase 1, Stand 1c).
 - **`.tsl` geprüft (1a, Scheibe 7, 16.11.2026):** billig, deshalb schon in 1a. Eine Gen-3-`.tsl` ist JSON mit je
   Patch „Blockname → Bytes als Hex-Texte“, und die 80 Blocknamen liegen eins zu eins auf unserer Blocktabelle
   (`protocol-notes.md` 2.14). Export „Diesen Patch als .tsl“ und „A1–B4 als .tsl“ (acht Patches aus einem
@@ -686,7 +687,21 @@ Bestätigungsfenster mit Kanal und Patchname. Gibt es heute noch kein Backup (Da
 lokal gemerkt), bietet das Fenster beim ersten Speichern der Sitzung „Erst sichern“ und „Ohne Backup speichern“
 an. Erfolg: kurzer Hinweis „Auf A1 gespeichert · geprüft“; Abweichung, fehlende Quittung, Abbruch: rote Leiste
 bis „OK“. Der Mock quittiert wie gemessen (zweimal) und hat im Verbindungsfenster Fehler zum Einschalten
-(„Keine Quittung“, „Falscher Inhalt“). Im Browser mit dem Mock durchgespielt; am Amp noch nicht.
+(„Keine Quittung“, „Falscher Inhalt“). Im Browser mit dem Mock durchgespielt; am Amp noch nicht. Gemergt als #22.
+
+PR 2 (17.11.2026): **Namenstest am Amp** (`katana-probe.ps1 -NameTest`, nur aktueller Patch, kein
+`PATCH_WRITE`): Ein 16-Byte-DT1 auf den Namensblock kommt so zurück, kein anderer Block ändert sich; Zeichen
+außerhalb 32–125 macht der Amp selbst zu Leerzeichen (`protocol-notes.md` 2.8). **Umbenennen:** Tippen auf den
+Namen im Kopf öffnet ein Eingabefeld; `setName()` bereinigt den Text (`patchNameFrom`: Umlaute werden zu zwei
+Buchstaben, andere Zeichen fallen weg, höchstens 16) und schreibt den Namensblock. Danach „Ungespeichert“,
+„Alles zurück“ holt den gespeicherten Namen. **Zurückspielen:** „Patch aus Datei laden“ im Verbindungsfenster
+liest unser Backup, unsere Patch-Datei oder eine `.tsl` (`src/storage/sources.ts`; unvollständige Patches sind
+markiert und nicht wählbar). Im Fenster Patch und Ziel-Kanal A1–B4 wählen; `loadPatch()` wechselt bei Bedarf
+den Kanal, merkt sich Ungespeichertes des Ziels als gemerkte Änderungen, schreibt jeden abweichenden Block ganz
+(readonly nie), liest zurück und vergleicht. Gespeichert wird nichts: Eine Leiste „… in B2 geladen · noch nicht
+gespeichert“ mit „Speichern“ führt in dieselbe Bestätigung wie der Speicherknopf. Testplan
+`docs/testplan/phase-1c.md`, Version 0.4.0. Im Browser mit dem Mock durchgespielt (Umbenennen, Datei laden in
+einen anderen Kanal, Speichern); am Amp folgt der Test mit dem Release v0.4.0.
 
 ### Phase 2 – Alle Klangparameter
 - Alle Effekttypen mit allen Parametern, alle Variationen.

@@ -30,6 +30,7 @@ const base: ConnectionState = {
   lastReadAt: 0,
   backingUp: false,
   saving: false,
+  loading: false,
 };
 
 describe('view helpers', () => {

@@ -160,19 +160,19 @@ describe('knobs of booster, delay and reverb (Phase 1b)', () => {
 });
 
 describe('writable (PLAN 4.4: only confirmed addresses are written)', () => {
-  it('needs status C and no read-only flag; names are never written', () => {
+  it('needs status C and no read-only flag; the name is writable since 1c', () => {
     expect(writable(NS_THRESHOLD)).toBe(true);
     expect(writable({ ...NS_THRESHOLD, status: 'D' })).toBe(false);
     expect(writable({ ...NS_THRESHOLD, readonly: true })).toBe(false);
-    expect(writable({ ...PATCH_NAME })).toBe(false);
+    expect(writable(PATCH_NAME)).toBe(true);
   });
 });
 
 describe('status after the address check on the amp (2026-11-16)', () => {
-  it('everything of Phase 1b is writable; only layer mode and the Delay 2 switch stay locked', () => {
+  it('everything of Phase 1b and the name are writable; only layer mode and the Delay 2 switch stay locked', () => {
     const locked = [...PATCH_PARAMS, ...VARIATION_PARAMS]
       .filter((p) => !writable(p))
       .map((p) => p.key.replace(/^reverb\.\d\./, 'reverb.n.'));
-    expect([...new Set(locked)].sort()).toEqual(['delay2.on', 'patch.name', 'reverb.n.layerMode']);
+    expect([...new Set(locked)].sort()).toEqual(['delay2.on', 'reverb.n.layerMode']);
   });
 });

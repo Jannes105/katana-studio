@@ -118,6 +118,28 @@ const en = {
   'save.unchecked': 'Saved to {slot}, but reading it back failed. Check with "Read again".',
   'save.aborted': 'Saving to {slot} was interrupted (channel change or cable). Check {slot}.',
   'save.refused': 'Saving is not possible right now.',
+  'header.rename': 'Rename patch',
+  'rename.title': 'Rename patch',
+  'rename.hint': 'Up to 16 characters, no umlauts (ä becomes ae). Unsaved until you save.',
+  'rename.apply': 'Apply',
+
+  'load.button': 'Load a patch from a file',
+  'load.hint':
+    'Backup, patch file or .tsl. The patch goes into the current settings of a channel; listen, then save.',
+  'load.title': 'Load patch',
+  'load.pick': 'Patch from the file',
+  'load.current': 'current',
+  'load.incomplete': 'incomplete',
+  'load.target': 'Into channel',
+  'load.note':
+    'Not saved yet, so you can listen first. Unsaved changes of {slot} are kept as remembered changes.',
+  'load.confirm': 'Load into {slot}',
+  'load.running': 'Loading…',
+  'load.loaded': '"{name}" loaded into {slot} · not saved yet',
+  'load.mismatch': 'After loading, {count} block(s) of {slot} read back differently. Check before saving.',
+  'load.aborted': 'Loading into {slot} was interrupted (channel change or cable).',
+  'load.refused': 'Loading is not possible right now.',
+  'load.badFile': 'This file cannot be read: {reason}',
 
   'tab.probe': 'Rehearsal',
   'tab.fx': 'Effects',
@@ -264,6 +286,29 @@ const de: Record<TextKey, string> = {
   'save.unchecked': 'Auf {slot} gespeichert, aber das Zurücklesen schlug fehl. Mit „Neu lesen“ prüfen.',
   'save.aborted': 'Speichern auf {slot} unterbrochen (Kanalwechsel oder Kabel). {slot} prüfen.',
   'save.refused': 'Speichern geht gerade nicht.',
+  'header.rename': 'Patch umbenennen',
+  'rename.title': 'Patch umbenennen',
+  'rename.hint': 'Bis 16 Zeichen, keine Umlaute (ä wird ae). Ungespeichert, bis du speicherst.',
+  'rename.apply': 'Übernehmen',
+
+  'load.button': 'Patch aus Datei laden',
+  'load.hint':
+    'Backup, Patch-Datei oder .tsl. Der Patch kommt in die aktuellen Einstellungen eines Kanals; anhören, dann speichern.',
+  'load.title': 'Patch laden',
+  'load.pick': 'Patch aus der Datei',
+  'load.current': 'aktuell',
+  'load.incomplete': 'unvollständig',
+  'load.target': 'In Kanal',
+  'load.note':
+    'Noch nicht gespeichert, du kannst also erst anhören. Ungespeicherte Änderungen von {slot} bleiben als gemerkte Änderungen.',
+  'load.confirm': 'In {slot} laden',
+  'load.running': 'Lade…',
+  'load.loaded': '„{name}“ in {slot} geladen · noch nicht gespeichert',
+  'load.mismatch':
+    'Nach dem Laden lesen sich {count} Block/Blöcke von {slot} anders zurück. Vor dem Speichern prüfen.',
+  'load.aborted': 'Laden in {slot} unterbrochen (Kanalwechsel oder Kabel).',
+  'load.refused': 'Laden geht gerade nicht.',
+  'load.badFile': 'Diese Datei lässt sich nicht lesen: {reason}',
 
   'tab.probe': 'Probe',
   'tab.fx': 'Effekte',
