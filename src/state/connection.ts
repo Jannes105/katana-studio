@@ -29,12 +29,13 @@ import {
 } from '../protocol/address';
 import { u2x4, u4x4, u7 } from '../protocol/encoding';
 import { greet, modelName, type GreetingWarning } from '../protocol/greeting';
-import { READ_ONLY_PATCH_OFFSETS, blockKey } from '../protocol/blocks';
+import { PATCH_BLOCKS, READ_ONLY_PATCH_OFFSETS, WRITABLE_PATCH_BLOCKS, blockKey } from '../protocol/blocks';
+import { patchName } from '../protocol/encoding';
 import { SendQueue, type Diagnostic } from '../protocol/queue';
 import { hex, type ParsedMessage } from '../protocol/sysex';
 import { PATCH_NAME, PATCH_PARAMS, VARIATION_PARAMS } from '../model/params';
-import { PatchImage, patchBlockAt, readText } from '../model/patch';
-import type { BackupFile, PatchFile } from '../storage/format';
+import { PatchImage, patchBlockAt, patchNameFrom, readText } from '../model/patch';
+import { isComplete, type BackupFile, type BlockBytes, type PatchFile } from '../storage/format';
 import { patchFileFrom, readBackup, type FileMeta } from './backup';
 import { encodingSize, writable, type ParamDef } from '../model/schema';
 
@@ -44,6 +45,8 @@ export const PATCH_CHANGE_MAX_WAIT_MS = 300;
 export const LOG_LIMIT = 1000;
 /** Wait for the acknowledgement of PATCH_WRITE (measured: about 2 ms, protocol-notes 2.15). */
 export const SAVE_ACK_TIMEOUT_MS = 2000;
+/** How long loading a patch waits for the channel switch and its reads. */
+export const LOAD_SWITCH_TIMEOUT_MS = 3000;
 
 /** Channels the app may select (PLAN 5, 1b: A1–B4; the Panel is only shown). */
 export const SELECTABLE_CHANNELS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
@@ -80,6 +83,18 @@ export type SaveResult =
   | { readonly kind: 'saved'; readonly index: number }
   | { readonly kind: 'mismatch'; readonly index: number; readonly blocks: readonly string[] }
   | { readonly kind: 'no-ack' | 'unchecked' | 'aborted'; readonly index: number }
+  | { readonly kind: 'refused' };
+
+/**
+ * Outcome of loading a patch from a file into a channel (PLAN 1c: restore). `loaded`: every writable block was
+ * written into the current patch and read back as written; nothing is saved yet. `mismatch`: these blocks read
+ * back differently. `aborted`: channel change, cable or timeout while loading. `refused`: not possible now or
+ * the patch is incomplete (nothing was written).
+ */
+export type LoadResult =
+  | { readonly kind: 'loaded'; readonly index: number; readonly written: number }
+  | { readonly kind: 'mismatch'; readonly index: number; readonly blocks: readonly string[] }
+  | { readonly kind: 'aborted'; readonly index: number }
   | { readonly kind: 'refused' };
 
 /** Every writable parameter by each of its byte offsets (PLAN 4.4: only addresses from our list are written). */
@@ -124,6 +139,8 @@ export interface ConnectionState {
   readonly backingUp: boolean;
   /** True while saving onto the channel (writes are locked). */
   readonly saving: boolean;
+  /** True while a patch from a file is loaded into the current patch (writes are locked). */
+  readonly loading: boolean;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'in' | 'out';
@@ -162,6 +179,7 @@ const INITIAL: ConnectionState = {
   lastReadAt: null,
   backingUp: false,
   saving: false,
+  loading: false,
 };
 
 export function slotName(index: number | null): string {
@@ -366,7 +384,7 @@ export class AmpConnection {
    * address not yet confirmed on the amp). Parameters of a variation go through instanceParam().
    */
   async setValue(def: ParamDef, raw: number): Promise<void> {
-    if (!this.canWrite() || !writable(def)) return;
+    if (!this.canWrite() || !writable(def) || def.encoding === 'ascii16') return;
     const v = Math.min(def.max, Math.max(def.min, Math.round(raw)));
     const data = def.encoding === 'u4x4' ? u4x4.encode(v) : u7.encode(v);
     await this.writeRuns([{ offset: def.at, data }]);
@@ -382,6 +400,7 @@ export class AmpConnection {
       !s.reading &&
       !s.backingUp &&
       !s.saving &&
+      !s.loading &&
       s.current.complete
     );
   }
@@ -427,6 +446,90 @@ export class AmpConnection {
     }
     await this.writeRuns([...runs].map(([offset, data]) => ({ offset, data })));
     return { previous, skipped, generation, wholeBlocks };
+  }
+
+  /**
+   * Renames the current patch (PLAN 1c): writes the name block (16 bytes, cleaned by patchNameFrom). Shown at
+   * once, unsaved until saved; a double tap or "Revert all" brings the stored name back. Returns the name
+   * written, or null when writing is not allowed.
+   */
+  async setName(text: string): Promise<string | null> {
+    if (!this.canWrite()) return null;
+    const name = patchNameFrom(text);
+    await this.writeRuns([{ offset: PATCH_NAME.at, data: patchName.encode(name) }]);
+    return name;
+  }
+
+  /**
+   * Loads a patch from a file into a channel (PLAN 1c: restore; never directly into a stored slot, that is
+   * Phase 4). Switches to the channel if needed (unsaved changes there are remembered as usual), keeps the
+   * unsaved changes of the target as remembered changes, writes every writable block that differs as a whole
+   * block (read-only blocks never), reads the current patch back and compares. Nothing is saved: the user
+   * listens first and then saves the usual way.
+   */
+  async loadPatch(blocks: BlockBytes, index: number): Promise<LoadResult> {
+    if (!this.canWrite() || this.patchChangePending()) return { kind: 'refused' };
+    if (!(SELECTABLE_CHANNELS as readonly number[]).includes(index)) return { kind: 'refused' };
+    if (!isComplete(blocks, PATCH_BLOCKS)) return { kind: 'refused' };
+    const name = slotName(index);
+    this.addLog('info', `Loading a patch from a file into ${name}`);
+    if (index !== this.stateValue.patchIndex) {
+      if (!(await this.selectChannel(index))) return { kind: 'refused' };
+      const ready = await this.waitForState(
+        (s) =>
+          s.patchIndex === index &&
+          !s.reading &&
+          s.current.complete &&
+          s.unsavedKnown &&
+          !this.patchChangePending(),
+        LOAD_SWITCH_TIMEOUT_MS,
+      );
+      if (!ready || !this.canWrite()) {
+        this.addLog('error', `Loading into ${name} aborted: the channel did not switch`);
+        return { kind: 'aborted', index };
+      }
+    }
+    const queue = this.queue;
+    if (!queue) return { kind: 'aborted', index };
+    const generation = this.patchGeneration;
+    this.rememberUnsaved(index);
+    this.update({ loading: true });
+    try {
+      const runs = WRITABLE_PATCH_BLOCKS.flatMap((b) => {
+        const data = blocks.get(b.key);
+        const now = this.stateValue.current.block(b.offset);
+        return data && !sameList(data, now ?? []) ? [{ offset: b.offset, data }] : [];
+      });
+      await this.writeRuns(runs);
+      if (generation !== this.patchGeneration) return this.loadAborted(index);
+      const reply = await queue.read(ADDR.currentPatch, SIZE.patch);
+      if (generation !== this.patchGeneration) return this.loadAborted(index);
+      const image = PatchImage.fromReply(reply.blocks, ADDR.currentPatch);
+      if (image.complete) {
+        this.update({ current: image, patchName: readText(image, PATCH_NAME) ?? null });
+        this.updateUnsaved();
+      }
+      const differ = WRITABLE_PATCH_BLOCKS.filter(
+        (b) => !sameList(image.block(b.offset) ?? [], blocks.get(b.key) ?? []),
+      ).map((b) => b.key);
+      if (differ.length > 0) {
+        this.addLog(
+          'error',
+          `Loaded into ${name}, but ${differ.length} block(s) read back differently: ${differ.join(', ')}`,
+        );
+        return { kind: 'mismatch', index, blocks: differ };
+      }
+      this.addLog(
+        'info',
+        `Loaded into ${name}: ${runs.length} block(s) written, read back as written; not saved yet`,
+      );
+      return { kind: 'loaded', index, written: runs.length };
+    } catch (error) {
+      if (!isCancelled(error)) this.addLog('error', `Loading into ${name}: ${describe(error)}`);
+      return this.loadAborted(index);
+    } finally {
+      this.update({ loading: false });
+    }
   }
 
   /** Double tap on a knob (rule 7): the parameter goes back to the stored value of the channel. */
@@ -621,6 +724,40 @@ export class AmpConnection {
 
   // ---- internals ----
 
+  private loadAborted(index: number): LoadResult {
+    this.addLog('error', `Loading into ${slotName(index)} aborted (channel change or amp unplugged)`);
+    return { kind: 'aborted', index };
+  }
+
+  /** Resolves true once the state satisfies `ok`, false after `ms`. */
+  private waitForState(ok: (s: ConnectionState) => boolean, ms: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (ok(this.stateValue)) return resolve(true);
+      const listener = (s: ConnectionState): void => {
+        if (!ok(s)) return;
+        clearTimeout(timer);
+        this.listeners.delete(listener);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.listeners.delete(listener);
+        resolve(false);
+      }, ms);
+      this.listeners.add(listener);
+    });
+  }
+
+  /** Keeps the unsaved changes of the current channel as remembered changes (before loading over them). */
+  private rememberUnsaved(index: number): void {
+    const s = this.stateValue;
+    if (!s.unsavedKnown || s.unsaved.length === 0) return;
+    const changes = s.unsaved.map((offset) => ({ offset, value: s.current.read(offset, 1)?.[0] ?? 0 }));
+    const remembered = new Map(s.remembered);
+    remembered.set(index, changes);
+    this.update({ remembered });
+    this.addLog('info', `Remembered ${changes.length} unsaved bytes of ${slotName(index)} before loading`);
+  }
+
   /** Resolves true on the acknowledgement of PATCH_WRITE for `index`, false on timeout, unplug or patch change. */
   private waitForSaveAck(index: number): Promise<boolean> {
     this.saveAck?.settle(false);
@@ -648,7 +785,7 @@ export class AmpConnection {
     stamp();
     let current = this.stateValue.current;
     for (const r of runs) current = current.with(r.offset, r.data);
-    this.update({ current });
+    this.update({ current, patchName: readText(current, PATCH_NAME) ?? null });
     this.updateUnsaved();
     try {
       await Promise.all(runs.map((r) => queue.write(ADDR.currentPatch + r.offset, r.data)));

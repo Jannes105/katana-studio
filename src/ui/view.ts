@@ -75,7 +75,13 @@ export function rememberedHere(s: ConnectionState): readonly ByteChange[] {
 /** Controls can change the amp right now (mirrors AmpConnection.canWrite, from the state alone). */
 export function canEdit(s: ConnectionState): boolean {
   return (
-    s.phase === 'connected' && !s.readOnly && !s.reading && !s.backingUp && !s.saving && s.current.complete
+    s.phase === 'connected' &&
+    !s.readOnly &&
+    !s.reading &&
+    !s.backingUp &&
+    !s.saving &&
+    !s.loading &&
+    s.current.complete
   );
 }
 

@@ -19,6 +19,33 @@ import { encodingSize, type ParamDef, type VariantGroup } from './schema';
 
 const BY_OFFSET = new Map<number, Block>(PATCH_BLOCKS.map((b) => [b.offset, b]));
 
+const NAME_REPLACEMENTS: Readonly<Record<string, string>> = {
+  ä: 'ae',
+  ö: 'oe',
+  ü: 'ue',
+  Ä: 'Ae',
+  Ö: 'Oe',
+  Ü: 'Ue',
+  ß: 'ss',
+};
+
+/**
+ * Text the amp can store as a patch name (protocol-notes 2.8: 16 characters 32–125; the amp itself turns
+ * anything else into a space). German umlauts become two letters, other characters are dropped, the rest is cut
+ * to 16 characters. Trailing spaces are removed (the encoding pads them again).
+ */
+export function patchNameFrom(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const r = NAME_REPLACEMENTS[ch] ?? ch;
+    for (const c of r) {
+      const code = c.charCodeAt(0);
+      if (c.length === 1 && code >= 32 && code <= 125) out += c;
+    }
+  }
+  return out.slice(0, 16).trimEnd();
+}
+
 /** The patch block that contains this offset (linear, from the patch base). */
 export function patchBlockAt(offset: Address): Block | undefined {
   for (const b of PATCH_BLOCKS) if (offset >= b.offset && offset < b.offset + b.length) return b;

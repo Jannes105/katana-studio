@@ -56,7 +56,7 @@ export interface ParamDef {
  * the amp (status C). Until an address is checked by writing and reading back, it stays read-only in the app.
  */
 export function writable(def: ParamDef): boolean {
-  return !def.readonly && def.status === 'C' && def.encoding !== 'ascii16';
+  return !def.readonly && def.status === 'C';
 }
 
 /** True if a VariantGroup parameter is shown for the given type (raw). */

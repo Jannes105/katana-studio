@@ -1,6 +1,6 @@
 # Read-only probe for the Katana Gen 3 on the Windows MIDI port "KATANA3".
 # Sends only the identity request and RQ1 (read) requests, except with -SelectTest, -EditorMode,
-# -WriteTest, -ParamTest, -BlockTest and -SaveTest (see the parameters below).
+# -WriteTest, -ParamTest, -BlockTest, -SaveTest and -NameTest (see the parameters below).
 # Usage:  powershell -File tools/katana-probe.ps1 [-IdleSeconds 60] [-OutDir captures]
 # BOSS Tone Studio and any browser tab using the port must be closed.
 param(
@@ -46,7 +46,11 @@ param(
   [string]$SaveTo = '',
   # With -SaveTest: afterwards NS threshold +-1, save, check, threshold back, save again, check (two more
   # PATCH_WRITE). The slot must end exactly as at the start.
-  [switch]$SaveChange
+  [switch]$SaveChange,
+  # Writes: the patch name of the current patch only (block 00 00, 16 bytes; never PATCH_WRITE). Writes a test
+  # name, a name with characters outside 32..125, and a partial name (first 4 bytes only), reads each back,
+  # then restores the original name and checks that the whole patch is as at the start.
+  [switch]$NameTest
 )
 $ErrorActionPreference = 'Stop'
 
@@ -334,7 +338,7 @@ try {
     "amp sent {0} message(s):" -f $w.Messages.Count
     $w.Messages | Select-Object -First 10 | ForEach-Object { "  " + (Hex ($_.Data | Select-Object -First 32)) }
     "after: " + (Hex (Ask (Rq1 (0x7F, 0, 0, 1) (0, 0, 0, 1)) 'RQ1 editor mode' 400 50).Dt1[0].Data)
-    if ($Listen -le 0 -and -not ($BlockTest -or $SaveTest)) { return }
+    if ($Listen -le 0 -and -not ($BlockTest -or $SaveTest -or $NameTest)) { return }
   }
 
   if ($Listen -gt 0) {
@@ -643,6 +647,40 @@ try {
     $rf = Join-Path $OutDir ("param-test-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     [ordered]@{ tool = 'katana-probe.ps1 -ParamTest'; at = (Get-Date).ToString('o'); results = $results } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $rf
     "Results saved: $rf"
+    return
+  }
+
+  if ($NameTest) {
+    "`n== Name test: block 00 00 of the current patch (20 00 00 00, 16 bytes); never PATCH_WRITE"
+    $start = ReadBlocks (0x20, 0, 0, 0) 'current patch (start)'
+    if ($start.Count -ne 80) { throw "current patch incomplete: $($start.Count) of 80 blocks" }
+    $orig = [byte[]]$start[0]
+    function NameText([byte[]]$b) { -join ($b | ForEach-Object { if ($_ -ge 32 -and $_ -le 126) { [char]$_ } else { '?' } }) }
+    function Padded([string]$text) { [byte[]](($text.PadRight(16).Substring(0, 16)).ToCharArray() | ForEach-Object { [int]$_ }) }
+    function ReadName { $x = ReadBlocks (0x20, 0, 0, 0) 'name' (0, 0, 0, 16) 100; if ($x.ContainsKey(0)) { [byte[]]$x[0] } else { $null } }
+    "original name: '$(NameText $orig)'  ($(Hex $orig))"
+    $tests = @(
+      @{ Label = 'test name'; Addr = (0x20, 0, 0, 0); Data = (Padded 'KS NAME TEST 1'); Expect = (Padded 'KS NAME TEST 1') },
+      @{ Label = 'characters 126 and 31 at the end'; Addr = (0x20, 0, 0, 0); Data = ([byte[]]((Padded 'KS NAME TEST 2')[0..13] + 126, 31)); Expect = $null },
+      @{ Label = 'partial: first 4 bytes only'; Addr = (0x20, 0, 0, 0); Data = (Padded 'ABCD')[0..3]; Expect = $null })
+    try {
+      foreach ($t in $tests) {
+        $before = ReadName
+        $w = Ask (Dt1 ([byte[]]$t.Addr) ([byte[]]$t.Data)) "DT1 name: $($t.Label)" 400 100
+        $got = ReadName
+        $other = @(BlockDiff $start (ReadBlocks (0x20, 0, 0, 0) "current patch after $($t.Label)") | Where-Object { $_ -ne 0 })
+        "$($t.Label): wrote $(Hex $t.Data); read back '$(NameText $got)' ($(Hex $got)); amp sent $($w.Messages.Count) message(s); other blocks changed: $(if ($other.Count) { ($other | ForEach-Object { OfsHex $_ }) -join ', ' } else { 'none' })"
+        if ($t.Expect) { "  as written: $((Hex $got) -eq (Hex $t.Expect))" }
+        $script:Results[$t.Label] = [ordered]@{ wrote = (Hex $t.Data); before = (Hex $before); readBack = (Hex $got); ampMessages = $w.Messages.Count; otherBlocks = @($other | ForEach-Object { OfsHex $_ }) }
+      }
+    }
+    finally {
+      $null = Ask (Dt1 (0x20, 0, 0, 0) $orig) 'DT1 name: restore' 400 100
+      $end = @(BlockDiff $start (ReadBlocks (0x20, 0, 0, 0) 'current patch (end)'))
+      "`nname restored: '$(NameText (ReadName))'; whole patch as at the start: $(if ($end.Count) { 'NO, blocks ' + (($end | ForEach-Object { OfsHex $_ }) -join ', ') } else { 'yes (80 of 80 blocks)' })"
+      $script:Results['endDifferent'] = @($end | ForEach-Object { OfsHex $_ })
+      SaveResults 'name-test'
+    }
     return
   }
 

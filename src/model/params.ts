@@ -41,7 +41,7 @@ export const PATCH_NAME: ParamDef = {
   min: 32,
   max: 125,
   control: 'text',
-  status: 'C',
+  status: 'C', // written and read back 2026-11-17 (katana-probe.ps1 -NameTest, protocol-notes 2.8)
 };
 
 // ---- Amp (block 06 00, 10 bytes) ----

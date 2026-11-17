@@ -10,7 +10,15 @@
     lang,
     onStatus,
     onChannels,
-  }: { s: ConnectionState; lang: Language; onStatus: () => void; onChannels: () => void } = $props();
+    onRename,
+  }: {
+    s: ConnectionState;
+    lang: Language;
+    onStatus: () => void;
+    onChannels: () => void;
+    /** Tapping the name renames the patch (PLAN 1c). */
+    onRename: () => void;
+  } = $props();
 
   const shown = $derived(hasPatch(s));
   const dot = $derived(connectionDot(s));
@@ -23,7 +31,9 @@
       {shown ? slotName(s.patchIndex) : '––'}
     </button>
     <span class="meta">
-      <span class="name">{shown ? s.patchName || '–' : t(lang, 'header.noPatch')}</span>
+      <button class="name" disabled={!shown} onclick={onRename} aria-label={t(lang, 'header.rename')}>
+        {shown ? s.patchName || '–' : t(lang, 'header.noPatch')}
+      </button>
       <span class="saved" class:unsaved>
         {#if !shown || !s.unsavedKnown}
           &nbsp;
@@ -81,6 +91,8 @@
     gap: 2px;
   }
   .name {
+    all: unset;
+    cursor: pointer;
     font-size: 1.3rem;
     font-weight: 600;
     white-space: nowrap;

@@ -129,7 +129,7 @@ Parameter names are our own. The full parameter list will be our own table in `s
 
 | Offset | Content | Encoding | Status |
 |---|---|---|---|
-| `00 00` + 0 | patch name | `ascii(16)` | [C 2026-11-14] read |
+| `00 00` + 0 | patch name | `ascii(16)` | [C 2026-11-14] read; **[C 2026-11-17]** written (`katana-probe.ps1 -NameTest`, current patch only, `captures/name-test-20261117-124207.json`): a 16-byte DT1 reads back as written, no other block changes; the amp turns characters outside 32–125 (tested 126 and 31) into spaces; a DT1 of only the first 4 bytes changes only those 4 |
 | `06 00` + 0 | amp gain | `u7` | [D]; the amp sent this block unsolicited as "gain/volume" [C 2026-11-15]; write unverified |
 | `06 00` + 1 | amp volume | `u7` | same as gain |
 | `06 00` + 2 | amp bass | `u7` | [D] |

@@ -17,6 +17,8 @@
   import { canEdit, hasPatch, rememberedHere } from './view';
   import { SELECTABLE_CHANNELS, slotName, type SaveResult, type WriteResult } from '../state/connection';
   import type { SaveFault } from '../mock/mock-amp';
+  import type { LoadResult } from '../state/connection';
+  import { readPatchSource, type PatchSource } from '../storage/sources';
 
   type Page = 'probe' | 'fx' | 'log';
 
@@ -127,6 +129,78 @@
     if (r.kind === 'saved') saveNoteTimer = setTimeout(() => (saveNote = null), SAVED_NOTE_MS);
   }
 
+  // ---- renaming (PLAN 1c) ----
+  let renameText = $state<string | null>(null);
+  function openRename(): void {
+    if (canEdit(s)) renameText = s.patchName ?? '';
+  }
+  async function applyRename(): Promise<void> {
+    const text = renameText;
+    renameText = null;
+    if (text !== null) await connection.setName(text);
+  }
+
+  // ---- loading a patch from a file (PLAN 1c: restore) ----
+  let fileInput = $state<HTMLInputElement | undefined>();
+  let source = $state<PatchSource | null>(null);
+  let pickIndex = $state<number | null>(null);
+  let loadTarget = $state(1);
+  /** The patch just loaded into a channel, until saved, reverted or the channel changes. */
+  let loaded = $state<{ index: number; name: string } | null>(null);
+
+  function chooseFile(): void {
+    fileNote = null;
+    fileInput?.click();
+  }
+  async function fileChosen(e: Event): Promise<void> {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const src = readPatchSource(await file.text());
+      const first = src.patches.findIndex((p) => p.complete);
+      source = src;
+      pickIndex = first >= 0 ? first : null;
+      loadTarget =
+        s.patchIndex !== null && (SELECTABLE_CHANNELS as readonly number[]).includes(s.patchIndex)
+          ? s.patchIndex
+          : 1;
+      statusOpen = false;
+    } catch (error) {
+      fileNote = {
+        ok: false,
+        text: t(lang, 'load.badFile', { reason: error instanceof Error ? error.message : String(error) }),
+      };
+    }
+  }
+  async function confirmLoad(): Promise<void> {
+    const entry = pickIndex === null ? undefined : source?.patches[pickIndex];
+    source = null;
+    if (!entry?.complete) return;
+    const index = loadTarget;
+    const r: LoadResult = await connection.loadPatch(entry.blocks, index);
+    if (r.kind === 'loaded') {
+      loaded = { index, name: entry.name };
+      return;
+    }
+    const slot = slotName(index);
+    saveNote = {
+      ok: false,
+      text:
+        r.kind === 'mismatch'
+          ? t(lang, 'load.mismatch', { slot, count: String(r.blocks.length) })
+          : r.kind === 'aborted'
+            ? t(lang, 'load.aborted', { slot })
+            : t(lang, 'load.refused'),
+    };
+  }
+  // The "loaded" banner goes when the channel changes, after saving or when nothing is unsaved any more.
+  $effect(() => {
+    if (loaded && (s.patchIndex !== loaded.index || (s.unsavedKnown && s.unsaved.length === 0)))
+      loaded = null;
+  });
+
   async function pickChannel(index: number): Promise<void> {
     channelsOpen = false;
     if (index !== s.patchIndex) await connection.selectChannel(index);
@@ -236,7 +310,13 @@
 </script>
 
 <div class="app">
-  <Header {s} {lang} onStatus={() => (statusOpen = true)} onChannels={() => (channelsOpen = true)} />
+  <Header
+    {s}
+    {lang}
+    onStatus={() => (statusOpen = true)}
+    onChannels={() => (channelsOpen = true)}
+    onRename={openRename}
+  />
 
   {#if shown && s.phase === 'waiting'}
     <div class="banner warn">{t(lang, 'banner.frozen')}</div>
@@ -255,6 +335,12 @@
     <div class="banner error" role="alert">
       <span class="grow">{saveNote.text}</span>
       <button onclick={() => (saveNote = null)}>{t(lang, 'action.ok')}</button>
+    </div>
+  {/if}
+  {#if loaded && !s.saving}
+    <div class="banner remember">
+      <span class="grow">{t(lang, 'load.loaded', { name: loaded.name, slot: slotName(loaded.index) })}</span>
+      <button disabled={!canEdit(s)} onclick={openSave}>{t(lang, 'save.confirm')}</button>
     </div>
   {/if}
   {#if remembered.length > 0 && page === 'probe' && s.patchIndex !== null}
@@ -368,6 +454,67 @@
   </Sheet>
 {/if}
 
+{#if renameText !== null}
+  <Sheet
+    title={t(lang, 'rename.title')}
+    closeLabel={t(lang, 'sheet.close')}
+    onClose={() => (renameText = null)}
+  >
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        void applyRename();
+      }}
+    >
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="text"
+        maxlength="24"
+        bind:value={renameText}
+        autofocus
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <p class="sublabel">{t(lang, 'rename.hint')}</p>
+      <div class="pair">
+        <button type="button" onclick={() => (renameText = null)}>{t(lang, 'save.cancel')}</button>
+        <button type="submit" class="primary" disabled={!canEdit(s)}>{t(lang, 'rename.apply')}</button>
+      </div>
+    </form>
+  </Sheet>
+{/if}
+
+{#if source}
+  {@const src = source}
+  <Sheet title={t(lang, 'load.title')} closeLabel={t(lang, 'sheet.close')} onClose={() => (source = null)}>
+    <p class="label">{t(lang, 'load.pick')}</p>
+    <div class="list">
+      {#each src.patches as p, i (i)}
+        <button class:on={pickIndex === i} disabled={!p.complete} onclick={() => (pickIndex = i)}>
+          <span class="tag">{p.label}</span>
+          <span class="grow">{p.name || '–'}</span>
+          {#if !p.complete}<span class="sub">{t(lang, 'load.incomplete')}</span>
+          {:else if p.current && src.kind === 'backup'}<span class="sub">{t(lang, 'load.current')}</span>{/if}
+        </button>
+      {/each}
+    </div>
+    <p class="label">{t(lang, 'load.target')}</p>
+    <div class="pick small">
+      {#each SELECTABLE_CHANNELS as i (i)}
+        <button class:on={loadTarget === i} onclick={() => (loadTarget = i)}>{PATCH_SLOT_NAMES[i]}</button>
+      {/each}
+    </div>
+    <p class="sublabel">{t(lang, 'load.note', { slot: slotName(loadTarget) })}</p>
+    <button
+      class="primary wide"
+      disabled={pickIndex === null || !canEdit(s)}
+      onclick={() => void confirmLoad()}
+    >
+      {s.loading ? t(lang, 'load.running') : t(lang, 'load.confirm', { slot: slotName(loadTarget) })}
+    </button>
+  </Sheet>
+{/if}
+
 {#if channelsOpen}
   <Sheet
     title={t(lang, 'channels.title')}
@@ -443,6 +590,9 @@
       >
     </div>
     <p class="sublabel">{t(lang, 'tsl.hint')}</p>
+    <button class="wide" disabled={!canEdit(s)} onclick={chooseFile}>{t(lang, 'load.button')}</button>
+    <p class="sublabel">{t(lang, 'load.hint')}</p>
+    <input class="hidden" type="file" bind:this={fileInput} onchange={(e) => void fileChosen(e)} />
     {#if fileNote}
       <p class="detail" class:error={!fileNote.ok}>{fileNote.text}</p>
     {/if}
@@ -667,6 +817,52 @@
     align-items: center;
     gap: 8px;
     font-size: 0.9rem;
+  }
+  .hidden {
+    display: none;
+  }
+  .text {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1px solid var(--faint);
+    background: var(--panel);
+    color: var(--fg);
+    font: inherit;
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .list button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    text-align: left;
+  }
+  .list button.on {
+    border: 2px solid var(--accent);
+  }
+  .tag {
+    min-width: 44px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .sub {
+    color: var(--faint);
+    font-size: 0.75rem;
+  }
+  .pick.small button {
+    min-height: 48px;
+    font-size: 1.1rem;
   }
   .toast.saved {
     box-shadow:

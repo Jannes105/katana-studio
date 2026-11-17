@@ -96,5 +96,5 @@ export async function expectQueueCompletes(capture: Capture): Promise<void> {
  * (param-test-*.json), which lies next to the captures and is no capture.
  */
 export function isCaptureFile(name: string): boolean {
-  return name.endsWith('.json') && !/^(param|block|save)-test-/.test(name);
+  return name.endsWith('.json') && !/^(param|block|save|name)-test-/.test(name);
 }
