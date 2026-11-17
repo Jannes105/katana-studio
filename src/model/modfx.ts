@@ -163,7 +163,7 @@ export const DC30_SELECT = ['CHORUS', 'ECHO'] as const;
 export const DC30_OUTPUT = ['D+E', 'D/E'] as const;
 
 /** Every parameter of every mod/FX type, by offset in the block; visibleFor holds the type (index into the type list). */
-export const MOD_FX_PARAMS: readonly ParamDef[] = [
+const LIST: readonly ParamDef[] = [
   // 0 twah
   fx('twah.mode', 'Mode', 0, {
     min: 0,
@@ -1078,3 +1078,21 @@ export const MOD_FX_PARAMS: readonly ParamDef[] = [
   fx('pedalBend.effectLevel', 'Effect Level', 223, { min: 0, max: 100, control: 'knob', visibleFor: [30] }),
   fx('pedalBend.directMix', 'Direct Mix', 224, { min: 0, max: 100, control: 'knob', visibleFor: [30] }),
 ];
+
+/** Harmony value USER: the voice follows its own scale (User Voice n). */
+const USER_HARMONY = HARMONIST_HARMONY.indexOf('USER');
+
+/** When a parameter shows (as on the pages of BOSS Tone Studio): voice 2 only with two voices, a user scale only for USER. */
+function showIf(p: ParamDef): ParamDef['showIf'] {
+  const m = /^(pitchShifter|harmonist).(user)?[vV]oice([12])/.exec(p.key);
+  if (!m) return undefined;
+  const [, effect, user, n] = m;
+  const conditions = n === '2' ? [{ key: `${effect}.voice`, values: [1] }] : [];
+  if (user) conditions.push({ key: `harmonist.voice${n}Harmony`, values: [USER_HARMONY] });
+  return conditions.length > 0 ? conditions : undefined;
+}
+
+export const MOD_FX_PARAMS: readonly ParamDef[] = LIST.map((p) => {
+  const cond = showIf(p);
+  return cond ? { ...p, showIf: cond } : p;
+});

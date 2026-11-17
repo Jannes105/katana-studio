@@ -1,10 +1,13 @@
 <script lang="ts">
   // Effects tab, direction C (PLAN 5, design round): one list with on/off, active variation and its type; a tap
-  // opens the effect page with all three variations. Since 1b everything here writes: on/off, active variation,
-  // type, and the knobs of booster, delay and reverb for the type of the active variation (mod and FX knobs
-  // follow in Phase 2).
-  import { NS_RELEASE, NS_SWITCH, NS_THRESHOLD, effectType } from '../model/params';
-  import { instanceParam, visibleFor, type ParamDef } from '../model/schema';
+  // opens the effect page with all three variations. Everything here writes: on/off, active variation, type, and
+  // the knobs of the active variation's type, on pages of at most six knobs (Phase 2, direction A). The delay
+  // page has a second tab for Delay 2 (variation = reverb colour); layer mode sits on the reverb page.
+  import { DELAY2, DELAY2_SWITCH, NS_RELEASE, NS_SWITCH, NS_THRESHOLD, effectType } from '../model/params';
+  import { readRaw } from '../model/patch';
+  import { MASTER_KEY } from '../model/sections';
+  import { instanceParam, type ParamDef, type VariantGroup } from '../model/schema';
+  import { effectLayout, type EffectPage } from './pages';
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
@@ -25,8 +28,14 @@
   } = $props();
   /** Key of the effect whose page is open; 'ns' for the noise suppressor. */
   let open = $state<string | null>(null);
-  /** The type list of the active variation is open. */
-  let choosingType = $state(false);
+  /** The type list of this group and variation is open. */
+  let choosingType = $state<{ group: VariantGroup; colour: number } | null>(null);
+  /** A choice with more than four options is open as a list. */
+  let choosingValue = $state<ParamDef | null>(null);
+  /** Page of the effect page (direction A) and the tab of the delay page. */
+  let page = $state(0);
+  let delayTab = $state<'delay' | 'delay2'>('delay');
+  const HARMONIST = 12;
 
   const COLOUR_CSS = ['var(--c-green)', 'var(--c-red)', 'var(--c-yellow)'] as const;
   const colourCss = (c: number | undefined) =>
@@ -41,14 +50,46 @@
   );
   const typeNamesMissing = $derived(rows.some((r) => r.group.typeNames.length === 0));
 
-  /** The parameters of the active variation that its type shows (read-only ones such as layer mode left out). */
-  function activeParams(r: EffectRow): ParamDef[] {
-    if (r.colour === undefined) return [];
-    const colour = r.colour;
-    const type = r.types[colour];
-    return r.group.params
-      .filter((p) => !p.readonly && visibleFor(p, type))
-      .map((p) => instanceParam(r.group, colour, p));
+  /** Back to page 1 whenever the effect, its variation or its type changes. */
+  const pageKey = $derived.by(() => {
+    if (!row || row.colour === undefined) return `${open}`;
+    return `${open}/${delayTab}/${row.colour}/${row.types[row.colour]}`;
+  });
+  $effect(() => {
+    void pageKey;
+    page = 0;
+  });
+
+  /** The layout of one variation: head choices and pages, with patch addresses (instanceParam). */
+  function layoutOf(g: VariantGroup, colour: number, type: number | undefined) {
+    const abs = (p: ParamDef): ParamDef => (p === MASTER_KEY ? p : instanceParam(g, colour, p));
+    const valueOf = (key: string): number | undefined => {
+      const p = g.params.find((q) => q.key === key);
+      return p ? paramView(s, instanceParam(g, colour, p)).value : undefined;
+    };
+    const extra = (g.key === 'mod' || g.key === 'fx') && type === HARMONIST ? [MASTER_KEY] : [];
+    const l = effectLayout(g.params, type, valueOf, extra);
+    return {
+      head: l.head.map(abs),
+      pages: l.pages.map((p) => ({ ...p, choices: p.choices.map(abs), knobs: p.knobs.map(abs) })),
+    };
+  }
+  function pageTitle(p: EffectPage, many: boolean): string {
+    const name = p.group ?? (many ? t(lang, 'fx.mainPage') : t(lang, 'fx.knobs'));
+    return p.part ? `${name} ${p.part.index}/${p.part.count}` : name;
+  }
+
+  // Swipe sideways between pages (knobs drag up/down, so a mostly horizontal move is a swipe).
+  let swipe: { x: number; y: number } | null = null;
+  function swipeStart(e: PointerEvent): void {
+    swipe = (e.target as HTMLElement).closest('.knob, button') ? null : { x: e.clientX, y: e.clientY };
+  }
+  function swipeEnd(e: PointerEvent, count: number): void {
+    if (!swipe) return;
+    const dx = e.clientX - swipe.x;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(e.clientY - swipe.y))
+      page = Math.max(0, Math.min(count - 1, page + (dx < 0 ? 1 : -1)));
+    swipe = null;
   }
 
   function set(def: ParamDef, raw: number): void {
@@ -59,9 +100,9 @@
     const result = await connection.revertParam(def);
     if (result && result.previous.length > 0) onUndoable(t(lang, 'undo.reset', { name: def.label }), result);
   }
-  function chooseType(r: EffectRow, type: number): void {
-    choosingType = false;
-    if (r.colour !== undefined) set(effectType(r.group, r.colour), type);
+  function chooseType(type: number): void {
+    if (choosingType) set(effectType(choosingType.group, choosingType.colour), type);
+    choosingType = null;
   }
 
   const signed = (v: number): string => (v > 0 ? `+${v}` : String(v));
@@ -115,20 +156,129 @@
 {#snippet choice(def: ParamDef)}
   {@const v = paramView(s, def)}
   {@const names = def.display?.table ?? []}
-  <div class="choice">
-    <div class="seg" class:changed={v.changed} role="radiogroup" aria-label={def.label}>
-      {#each names as name, i (name)}
-        <button
-          role="radio"
-          aria-checked={v.value === i}
-          class:sel={v.value === i}
-          disabled={!editable(s, def)}
-          onclick={() => set(def, i)}>{name}</button
-        >
-      {/each}
+  {#if names.length > 4}
+    <button
+      class="pick"
+      class:changed={v.changed}
+      aria-haspopup="dialog"
+      disabled={!editable(s, def)}
+      onclick={() => (choosingValue = def)}
+    >
+      <span class="tlabel">{def.label}</span>
+      <span class="pname">{v.value === undefined ? '–' : (names[v.value] ?? v.value)}</span>
+      <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
+    </button>
+  {:else}
+    <div class="choice">
+      <div class="seg" class:changed={v.changed} role="radiogroup" aria-label={def.label}>
+        {#each names as name, i (name)}
+          <button
+            role="radio"
+            aria-checked={v.value === i}
+            class:sel={v.value === i}
+            disabled={!editable(s, def)}
+            onclick={() => set(def, i)}>{name}</button
+          >
+        {/each}
+      </div>
+      <span class="clabel">{def.label}</span>
     </div>
-    <span class="clabel">{def.label}</span>
-  </div>
+  {/if}
+{/snippet}
+
+{#snippet control(def: ParamDef)}
+  {#if def.control === 'switch'}
+    {@const v = paramView(s, def)}
+    <div class="row">
+      <span class="rlabel" class:changed={v.changed}>{def.label}</span>
+      {@render toggle(v.value === undefined ? undefined : v.value === 1, def.label, true, def)}
+    </div>
+  {:else}
+    {@render choice(def)}
+  {/if}
+{/snippet}
+
+{#snippet typeButton(g: VariantGroup, colour: number | undefined, name: string | undefined, changed: boolean)}
+  {#if colour !== undefined}
+    {@const typeDef = effectType(g, colour)}
+    <button
+      class="typebtn"
+      class:changed
+      aria-haspopup="dialog"
+      disabled={!editable(s, typeDef)}
+      onclick={() => (choosingType = { group: g, colour })}
+    >
+      <span class="tlabel">{t(lang, 'fx.type')} · {colourName(colour)}</span>
+      <span class="tname">{name ?? '–'}</span>
+      <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
+    </button>
+  {/if}
+{/snippet}
+
+{#snippet variantBody(g: VariantGroup, colour: number | undefined, type: number | undefined)}
+  {#if colour !== undefined}
+    {@const l = layoutOf(g, colour, type)}
+    {@const many = l.pages.length > 1}
+    {@const current = l.pages[Math.min(page, l.pages.length - 1)]}
+    <div class="vb" style:--rows={l.head.length + (current?.choices.length ?? 0)}>
+      {#each l.head as def (def.key)}
+        {@render control(def)}
+      {/each}
+      {#if current}
+        {#if many}
+          <div class="pagebar">
+            <button
+              class="arrow"
+              disabled={page === 0}
+              onclick={() => page--}
+              aria-label={t(lang, 'fx.prevPage')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+            </button>
+            <div class="tabs" role="tablist" aria-label={t(lang, 'fx.pages')}>
+              {#each l.pages as p, i (pageTitle(p, many))}
+                <button
+                  role="tab"
+                  aria-selected={i === page}
+                  class:sel={i === page}
+                  onclick={() => (page = i)}>{pageTitle(p, many)}</button
+                >
+              {/each}
+            </div>
+            <button
+              class="arrow"
+              disabled={page >= l.pages.length - 1}
+              onclick={() => page++}
+              aria-label={t(lang, 'fx.nextPage')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
+          </div>
+        {:else}
+          <div class="sect"><span class="title">{t(lang, 'fx.knobs')}</span><i></i></div>
+        {/if}
+        <div
+          class="fxpage"
+          role="tabpanel"
+          tabindex="-1"
+          aria-label={pageTitle(current, many)}
+          onpointerdown={swipeStart}
+          onpointerup={(e) => swipeEnd(e, l.pages.length)}
+        >
+          {#each current.choices as def (def.key)}
+            {@render control(def)}
+          {/each}
+          {#if current.knobs.length > 0}
+            <div class="knobs">
+              {#each current.knobs as def (def.key)}
+                {@render knob(def)}
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet back(title: string, on: boolean | undefined, def: ParamDef)}
@@ -144,87 +294,117 @@
 <div class="page" class:dim={dimmed(s)}>
   {#if row}
     {@const r: EffectRow = row}
-    {@const params = activeParams(r)}
-    {@const typeDef = r.colour === undefined ? null : effectType(r.group, r.colour)}
-    <div style:--c={colourCss(r.colour)}>
+    {@const reverb = rows.find((x) => x.key === 'reverb')}
+    {@const d2Colour = reverb?.colour}
+    {@const d2Type = d2Colour === undefined ? undefined : readRaw(s.current, effectType(DELAY2, d2Colour))}
+    {@const d2 = paramView(s, DELAY2_SWITCH)}
+    <div class="fx" class:withtabs={r.key === 'delay'} style:--c={colourCss(r.colour)}>
       {@render back(r.label, r.on, r.group.switch)}
-      <div class="sect"><span class="title">{t(lang, 'fx.variation')}</span><i></i></div>
-      <div class="variations" role="radiogroup" aria-label={t(lang, 'fx.variation')}>
-        {#each [0, 1, 2] as c (c)}
+      {#if r.key === 'delay'}
+        <div class="seg dtabs" role="tablist" aria-label={r.label}>
           <button
-            class="var"
-            class:sel={r.colour === c}
-            class:changed={r.colour === c && r.colourChanged}
-            role="radio"
-            aria-checked={r.colour === c}
-            style:--v={colourCss(c)}
-            disabled={!editable(s, r.group.colour)}
-            onclick={() => set(r.group.colour, c)}
+            role="tab"
+            aria-selected={delayTab === 'delay'}
+            class:sel={delayTab === 'delay'}
+            onclick={() => (delayTab = 'delay')}>{r.label}</button
           >
-            <span class="vhead"><span class="vled"></span>{colourName(c)}</span>
-            <span class="vtype" class:typechanged={r.typeChanged[c]}>
-              <span class="tlabel">{t(lang, 'fx.type')}</span>
-              {r.typeNames[c] ?? '–'}
-            </span>
-          </button>
-        {/each}
-      </div>
-      <p class="note">{t(lang, 'fx.variationNote')}</p>
-
-      {#if typeDef}
-        <button
-          class="typebtn"
-          class:changed={r.colour !== undefined && r.typeChanged[r.colour]}
-          aria-haspopup="dialog"
-          disabled={!editable(s, typeDef)}
-          onclick={() => (choosingType = true)}
-        >
-          <span class="tlabel"
-            >{t(lang, 'fx.type')} · {r.colour === undefined ? '' : colourName(r.colour)}</span
+          <button
+            role="tab"
+            aria-selected={delayTab === 'delay2'}
+            class:sel={delayTab === 'delay2'}
+            onclick={() => (delayTab = 'delay2')}>{DELAY2.label}</button
           >
-          <span class="tname">{r.colour === undefined ? '–' : (r.typeNames[r.colour] ?? '–')}</span>
-          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l5 5-5 5" /></svg>
-        </button>
+        </div>
       {/if}
-
-      {#if params.length > 0}
-        <div class="sect"><span class="title">{t(lang, 'fx.knobs')}</span><i></i></div>
-        <div class="knobs">
-          {#each params.filter((p) => p.control === 'knob') as def (def.key)}
-            {@render knob(def)}
+      {#if r.key === 'delay' && delayTab === 'delay2'}
+        <div class="row">
+          <span class="rlabel" class:changed={d2.changed}>{DELAY2.label}</span>
+          {@render toggle(
+            d2.value === undefined ? undefined : d2.value === 1,
+            DELAY2.label,
+            true,
+            DELAY2_SWITCH,
+          )}
+        </div>
+        <p class="note d2note">
+          {t(lang, 'fx.delay2Note', { colour: d2Colour === undefined ? '–' : colourName(d2Colour) })}
+        </p>
+        {@render typeButton(
+          DELAY2,
+          d2Colour,
+          d2Type === undefined ? undefined : DELAY2.typeNames[d2Type],
+          d2Colour !== undefined && paramView(s, effectType(DELAY2, d2Colour)).changed,
+        )}
+        {@render variantBody(DELAY2, d2Colour, d2Type)}
+      {:else}
+        <div class="variations" role="radiogroup" aria-label={t(lang, 'fx.variation')}>
+          {#each [0, 1, 2] as c (c)}
+            <button
+              class="var"
+              class:sel={r.colour === c}
+              class:changed={r.colour === c && r.colourChanged}
+              role="radio"
+              aria-checked={r.colour === c}
+              style:--v={colourCss(c)}
+              disabled={!editable(s, r.group.colour)}
+              onclick={() => set(r.group.colour, c)}
+            >
+              <span class="vhead"><span class="vled"></span>{colourName(c)}</span>
+              <span class="vtype" class:typechanged={r.typeChanged[c]}>
+                <span class="tlabel">{t(lang, 'fx.type')}</span>
+                {r.typeNames[c] ?? '–'}
+              </span>
+            </button>
           {/each}
         </div>
-        {#each params.filter((p) => p.control !== 'knob') as def (def.key)}
-          {#if def.control === 'switch'}
-            {@const v = paramView(s, def)}
-            <div class="row">
-              <span class="rlabel" class:changed={v.changed}>{def.label}</span>
-              {@render toggle(v.value === undefined ? undefined : v.value === 1, def.label, true, def)}
-            </div>
-          {:else}
-            {@render choice(def)}
-          {/if}
-        {/each}
-      {:else if r.key === 'mod' || r.key === 'fx'}
-        <p class="note">{t(lang, 'fx.knobsLaterPhase2')}</p>
+        <p class="note tall">{t(lang, 'fx.variationNote')}</p>
+        {@render typeButton(
+          r.group,
+          r.colour,
+          r.colour === undefined ? undefined : r.typeNames[r.colour],
+          r.colour !== undefined && r.typeChanged[r.colour] === true,
+        )}
+        {@render variantBody(r.group, r.colour, r.colour === undefined ? undefined : r.types[r.colour])}
       {/if}
     </div>
 
-    {#if choosingType && typeDef}
+    {#if choosingType}
+      {@const ct = choosingType}
+      {@const typeDef = effectType(ct.group, ct.colour)}
+      {@const current = paramView(s, typeDef).value}
       <Sheet
-        title={`${r.label} · ${t(lang, 'fx.type')}`}
+        title={`${ct.group.label} · ${t(lang, 'fx.type')}`}
         closeLabel={t(lang, 'sheet.close')}
-        onClose={() => (choosingType = false)}
+        onClose={() => (choosingType = null)}
       >
         <div class="types" role="radiogroup" aria-label={t(lang, 'fx.type')}>
-          {#each r.group.typeNames as name, i (name)}
-            {@const current = r.colour === undefined ? undefined : r.types[r.colour]}
+          {#each ct.group.typeNames as name, i (name)}
             <button
               role="radio"
               aria-checked={current === i}
               class:sel={current === i}
               disabled={!editable(s, typeDef)}
-              onclick={() => chooseType(r, i)}>{name}</button
+              onclick={() => chooseType(i)}>{name}</button
+            >
+          {/each}
+        </div>
+      </Sheet>
+    {/if}
+    {#if choosingValue}
+      {@const cv = choosingValue}
+      {@const current = paramView(s, cv).value}
+      <Sheet title={cv.label} closeLabel={t(lang, 'sheet.close')} onClose={() => (choosingValue = null)}>
+        <div class="types" role="radiogroup" aria-label={cv.label}>
+          {#each cv.display?.table ?? [] as name, i (name)}
+            <button
+              role="radio"
+              aria-checked={current === i}
+              class:sel={current === i}
+              disabled={!editable(s, cv)}
+              onclick={() => {
+                set(cv, i);
+                choosingValue = null;
+              }}>{name}</button
             >
           {/each}
         </div>
@@ -294,9 +474,30 @@
   .page {
     padding: 0 14px 12px;
   }
-  .dim {
-    opacity: 0.45;
+  /*
+   * An effect page never needs scrolling (wish 2026-11-17, as the rehearsal tab): two rows of knobs take what is
+   * left of the height of <main> (100cqh) after header, variations, type, page bar (--fixed) and the rows of
+   * choices on the page (--rows, about 50 px each); a knob row is its circle plus 48 px for value and name. Knobs
+   * between 46 and 100 px. The explanation shows only when there is room.
+   */
+  .fx {
+    --fixed: 250px;
   }
+  .fx.withtabs {
+    --fixed: 306px;
+  }
+  .vb {
+    --knob-max: clamp(46px, calc((100cqh - var(--fixed) - var(--rows) * 50px) / 2 - 48px), 100px);
+  }
+  .note.tall {
+    display: none;
+  }
+  @container (min-height: 760px) {
+    .note.tall {
+      display: block;
+    }
+  }
+
   .list {
     list-style: none;
     margin: 0;
@@ -459,9 +660,9 @@
   .var {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-height: 76px;
-    padding: 10px 12px;
+    gap: 4px;
+    min-height: 56px;
+    padding: 8px 10px;
     box-shadow: inset 0 -2px 0 transparent;
   }
   .var + .var {
@@ -555,8 +756,8 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: 2px 8px;
-    margin-top: 12px;
-    padding: 10px 12px 10px 16px;
+    margin-top: 8px;
+    padding: 8px 12px 8px 16px;
     text-align: left;
     background: var(--panel-2);
   }
@@ -594,12 +795,82 @@
   .rlabel.changed {
     color: var(--warn);
   }
-  .choice {
+  .pagebar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    margin: 6px -8px 2px;
+  }
+  .tabs {
     display: flex;
-    flex-direction: column;
     gap: 6px;
-    padding: 10px 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs button {
+    min-height: 34px;
+    padding: 4px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 17px;
+  }
+  .tabs button.sel {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .fxpage {
+    touch-action: pan-y;
+    min-height: 120px;
+  }
+  .arrow {
+    min-height: 44px;
+    min-width: 52px;
+    padding: 0;
+    background: transparent;
+  }
+  .arrow svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: var(--fg);
+    stroke-width: 2;
+  }
+  .pick {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0;
+    text-align: left;
+  }
+  .pick.changed .pname {
+    color: var(--warn);
+  }
+  .dtabs {
+    margin: 4px 0 8px;
+  }
+  .dtabs button {
+    flex: 1;
+  }
+  /* One row: label on the left, options on the right (fits the page height, Phase 2). */
+  .choice {
+    display: grid;
+    grid-template-columns: minmax(72px, auto) 1fr;
+    grid-template-areas: 'label seg';
+    align-items: center;
+    gap: 10px;
+    padding: 4px 4px;
     border-top: 1px solid var(--line);
+  }
+  .choice .seg {
+    grid-area: seg;
+  }
+  .choice .clabel {
+    grid-area: label;
   }
   .seg {
     display: grid;
@@ -608,7 +879,7 @@
     gap: 6px;
   }
   .seg button {
-    min-height: 44px;
+    min-height: 40px;
     padding: 0 6px;
     font-size: 0.85rem;
     color: var(--muted);
@@ -637,5 +908,38 @@
     border-color: var(--c, var(--accent));
     color: var(--c, var(--accent));
     font-weight: 700;
+  }
+  /* Small screens: flatter variations (no "Type" line), the type in one line, no Delay 2 hint. */
+  @container (max-height: 600px) {
+    .fx {
+      --fixed: 246px;
+    }
+    .fx.withtabs {
+      --fixed: 302px;
+    }
+    .var {
+      min-height: 0;
+      padding: 6px 10px;
+    }
+    .vtype .tlabel,
+    .d2note {
+      display: none;
+    }
+    .typebtn {
+      grid-template-columns: auto 1fr auto;
+      padding: 4px 12px 4px 16px;
+    }
+    .typebtn .tname {
+      grid-column: 2;
+      grid-row: 1;
+      font-size: 1rem;
+    }
+    .typebtn .chev {
+      grid-column: 3;
+      grid-row: 1;
+    }
+  }
+  .dim {
+    opacity: 0.45;
   }
 </style>
