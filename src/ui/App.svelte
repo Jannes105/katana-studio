@@ -639,10 +639,13 @@
 {/if}
 
 <style>
+  /* Exactly the screen height (safe area included), so the page never scrolls; <main> scrolls if needed. */
   .app {
+    position: relative;
+    box-sizing: border-box;
     max-width: 480px;
     margin: 0 auto;
-    min-height: 100dvh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     padding-top: env(safe-area-inset-top);
@@ -685,6 +688,9 @@
   }
   main {
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding-bottom: 4px;
   }
   .empty {
@@ -720,8 +726,6 @@
     padding: 0 12px;
   }
   nav {
-    position: sticky;
-    bottom: 0;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     background: var(--display);
@@ -805,10 +809,13 @@
     padding: 0;
     font-weight: 700;
   }
+  /* Floats above the tabs, over the content, without moving it. */
   .toast {
-    position: sticky;
-    bottom: calc(64px + env(safe-area-inset-bottom));
-    margin: 0 14px 8px;
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    margin: 0;
     padding: 6px 6px 6px 14px;
     border-radius: 12px;
     background: var(--panel-2);
