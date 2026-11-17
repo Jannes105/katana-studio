@@ -18,6 +18,7 @@
     contourFreqShift,
   } from '../model/params';
   import type { ParamDef } from '../model/schema';
+  import { CABINET_RESONANCE, contourType } from '../model/sections';
   import {
     SELECTABLE_CHANNELS,
     slotName,
@@ -78,8 +79,15 @@
       ? contourFreqShift(contour.value)
       : null,
   );
+  const typeDef = $derived(
+    contour.value === 1 || contour.value === 2 || contour.value === 3 ? contourType(contour.value) : null,
+  );
+  const ctype = $derived(typeDef ? paramView(s, typeDef) : null);
+  const cab = $derived(paramView(s, CABINET_RESONANCE));
   const moreChanged = $derived(
-    paramView(s, NS_THRESHOLD).changed ||
+    (ctype?.changed ?? false) ||
+      cab.changed ||
+      paramView(s, NS_THRESHOLD).changed ||
       paramView(s, NS_RELEASE).changed ||
       resonance.changed ||
       contour.changed ||
@@ -183,7 +191,7 @@
 
 {#if more}
   <Sheet title={t(lang, 'probe.more')} closeLabel={t(lang, 'sheet.close')} onClose={() => (more = false)}>
-    <div class:dim={dimmed(s)}>
+    <div class="moresheet" class:dim={dimmed(s)}>
       <div class="sect">
         <span class="title">{t(lang, 'probe.ns')}</span>
         <i></i>
@@ -219,6 +227,24 @@
           </button>
         {/each}
       </div>
+      {#if typeDef && ctype}
+        <div class="selector four" role="radiogroup" aria-label={t(lang, 'probe.contourType')}>
+          {#each [0, 1, 2, 3] as i (i)}
+            <button
+              class="choice"
+              class:sel={ctype.value === i}
+              role="radio"
+              aria-checked={ctype.value === i}
+              disabled={!editable(s, typeDef)}
+              onclick={() => set(typeDef, i)}
+            >
+              <span class="led" class:lit={ctype.value === i} class:changed={ctype.changed}></span>
+              {t(lang, 'probe.contourType')}
+              {i + 1}
+            </button>
+          {/each}
+        </div>
+      {/if}
       <div class="row">
         {#if freqShift}
           {@render knob(freqShift)}
@@ -239,6 +265,22 @@
           </button>
           <span class="celllabel">{t(lang, 'probe.powerAmp')}</span>
         </div>
+      </div>
+      <div class="sect"><span class="title">{CABINET_RESONANCE.label}</span><i></i></div>
+      <div class="selector three" role="radiogroup" aria-label={CABINET_RESONANCE.label}>
+        {#each CABINET_RESONANCE.display?.table ?? [] as name, i (name)}
+          <button
+            class="choice"
+            class:sel={cab.value === i}
+            role="radio"
+            aria-checked={cab.value === i}
+            disabled={!editable(s, CABINET_RESONANCE)}
+            onclick={() => set(CABINET_RESONANCE, i)}
+          >
+            <span class="led" class:lit={cab.value === i} class:changed={cab.changed}></span>
+            {name}
+          </button>
+        {/each}
       </div>
     </div>
   </Sheet>
@@ -349,6 +391,13 @@
   }
   .selector.four {
     grid-template-columns: repeat(4, 1fr);
+  }
+  /* "More" fits its window (85 % of the screen): the two knob rows shrink on short screens (56–100 px). */
+  .moresheet {
+    --knob-max: clamp(56px, calc((85dvh - 352px) / 2 - 48px), 100px);
+  }
+  .selector.three {
+    grid-template-columns: repeat(3, 1fr);
   }
   .off,
   .celllabel {

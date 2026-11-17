@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CHAIN_VARIANTS, chainOrder, type ChainSettings } from '../../src/model/chain';
+import {
+  CHAIN_VARIANTS,
+  chainOrder,
+  moveBlock,
+  movable,
+  placeBlock,
+  type ChainSettings,
+} from '../../src/model/chain';
 
 const base: ChainSettings = { variant: 2, pedalFx: 0, sendReturn: 0, eq1: 0, eq2: 0 };
 
@@ -67,5 +74,55 @@ describe('chain order (protocol-notes 2.8, Chain)', () => {
             expect(o).toHaveLength(12);
           }
     expect(() => chainOrder({ ...base, variant: 9 })).toThrow(RangeError);
+  });
+});
+
+describe('moving a block (chain page)', () => {
+  it('booster after mod: variant 1 (BST MOD) → 4 (MOD BST), nothing else moves', () => {
+    const s = { ...base, variant: 1 };
+    const next = moveBlock(s, 'booster', 1);
+    expect(next?.variant).toBe(4);
+    expect(moveBlock(s, 'booster', -1)).toBeNull(); // booster is already first before the amp (pedal FX is not moved)
+  });
+
+  it('EQ, pedal FX and send/return move by their positions; the amp never moves', () => {
+    expect(moveBlock(base, 'eq1', 1)).toEqual({ ...base, eq1: 1 });
+    expect(moveBlock(base, 'pedalFx', 1)).toEqual({ ...base, pedalFx: 1 });
+    expect(moveBlock(base, 'sendReturn', 1)).toEqual({ ...base, sendReturn: 1 });
+    expect(moveBlock(base, 'sendReturn', -1)).toEqual({ ...base, sendReturn: 2 });
+    expect(movable('amp')).toBe(false);
+    expect(moveBlock(base, 'reverb', 1)).toBeNull();
+  });
+
+  it('every move really moves the block in the asked direction', () => {
+    for (let variant = 0; variant < CHAIN_VARIANTS; variant++) {
+      const s = { ...base, variant };
+      for (const b of ['booster', 'mod', 'fx', 'delay'] as const)
+        for (const dir of [-1, 1] as const) {
+          const next = moveBlock(s, b, dir);
+          if (next) expect(Math.sign(chainOrder(next).indexOf(b) - chainOrder(s).indexOf(b))).toBe(dir);
+        }
+    }
+  });
+});
+
+describe('placing a block by drag and drop', () => {
+  it('drops on an allowed place, or the nearest one; the rest stays in order', () => {
+    const s = { ...base, variant: 0 }; // pedal FX, booster, EQ 1, EQ 2, amp, mod, fx, …
+    // drag mod to index 2 (right after the booster): variant 1 (booster, mod)
+    expect(placeBlock(s, 'mod', 2).variant).toBe(1);
+    // drag mod to index 1 (before the booster): variant 4 (mod, booster)
+    expect(placeBlock(s, 'mod', 1).variant).toBe(4);
+    // drag EQ 1 far down: after the amp
+    expect(placeBlock(s, 'eq1', 10).eq1).toBe(1);
+    // a drop where it already is changes nothing
+    expect(placeBlock(s, 'booster', 1)).toBe(s);
+    // fixed blocks never move
+    expect(placeBlock(s, 'amp', 0)).toBe(s);
+  });
+
+  it('send/return goes last when dropped at the end', () => {
+    const order = chainOrder(base);
+    expect(placeBlock(base, 'sendReturn', order.length - 1).sendReturn).toBe(1);
   });
 });

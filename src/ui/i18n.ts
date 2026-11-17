@@ -43,6 +43,7 @@ const en = {
   'probe.nsShort': 'NS',
   'probe.contourOff': 'Off',
   'probe.freqShiftOff': 'Freq Shift: contour off',
+  'probe.contourType': 'Type',
   'probe.powerAmp': 'Power amp variation',
   'probe.hint': 'Drag a knob up or down. Double tap: back to the saved value.',
 
@@ -58,6 +59,13 @@ const en = {
   'fx.type': 'Type',
   'fx.knobs': 'Knobs',
   'fx.mainPage': 'Main',
+  'chain.order': 'Signal order',
+  'chain.input': 'Input',
+  'chain.speaker': 'Speaker',
+  'chain.earlier': 'Earlier in the chain',
+  'chain.later': 'Later in the chain',
+  'chain.open': 'Page',
+  'chain.hint': 'Tap a block, or drag it up or down',
   'fx.pages': 'Pages',
   'fx.prevPage': 'Previous page',
   'fx.nextPage': 'Next page',
@@ -148,6 +156,7 @@ const en = {
 
   'tab.probe': 'Rehearsal',
   'tab.fx': 'Effects',
+  'tab.chain': 'Chain',
   'tab.log': 'Log',
 
   'log.copy': 'Copy log',
@@ -215,6 +224,7 @@ const de: Record<TextKey, string> = {
   'probe.nsShort': 'NS',
   'probe.contourOff': 'Aus',
   'probe.freqShiftOff': 'Freq Shift: Contour aus',
+  'probe.contourType': 'Typ',
   'probe.powerAmp': 'Endstufen-Variation',
   'probe.hint': 'Regler hoch oder runter ziehen. Doppeltipp: zurück auf den gespeicherten Wert.',
 
@@ -230,6 +240,13 @@ const de: Record<TextKey, string> = {
   'fx.type': 'Typ',
   'fx.knobs': 'Regler',
   'fx.mainPage': 'Allgemein',
+  'chain.order': 'Signalweg',
+  'chain.input': 'Input',
+  'chain.speaker': 'Speaker',
+  'chain.earlier': 'Früher in der Kette',
+  'chain.later': 'Später in der Kette',
+  'chain.open': 'Seite',
+  'chain.hint': 'Block antippen oder nach oben/unten ziehen',
   'fx.pages': 'Seiten',
   'fx.prevPage': 'Vorige Seite',
   'fx.nextPage': 'Nächste Seite',
@@ -322,6 +339,7 @@ const de: Record<TextKey, string> = {
 
   'tab.probe': 'Probe',
   'tab.fx': 'Effekte',
+  'tab.chain': 'Kette',
   'tab.log': 'Log',
 
   'log.copy': 'Log kopieren',

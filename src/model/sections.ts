@@ -220,3 +220,59 @@ export const SECTION_PARAMS: readonly ParamDef[] = [
   ...EQ_PARAMS,
   ...SEND_RETURN_PARAMS,
 ];
+
+// ---- The sections as units for the effects tab and its pages (PLAN 5, Phase 2 PR 3) ----
+
+export type SectionKey = 'pedalFx' | 'eq1' | 'eq2' | 'sendReturn' | 'solo';
+
+/** One section: its on/off switch, the parameter whose value picks what is shown (visibleFor), the rest. */
+export interface Section {
+  readonly key: SectionKey;
+  readonly label: string;
+  readonly switch: ParamDef;
+  /** Type (pedal FX, EQ): visibleFor of the other parameters refers to it. */
+  readonly type?: ParamDef;
+  /** Position in the chain (chain.ts), if the section has one. */
+  readonly position?: ParamDef;
+  /** Everything else in display order, the switch excluded (type and position are among them). */
+  readonly params: readonly ParamDef[];
+}
+
+const byKey = (list: readonly ParamDef[], key: string): ParamDef => {
+  const p = list.find((q) => q.key === key);
+  if (!p) throw new Error(`No parameter ${key}`);
+  return p;
+};
+
+function section(
+  key: SectionKey,
+  label: string,
+  list: readonly ParamDef[],
+  extra: { type?: string; position?: string } = {},
+): Section {
+  const sw = byKey(list, `${key}.on`);
+  return {
+    key,
+    label,
+    switch: sw,
+    ...(extra.type ? { type: byKey(list, extra.type) } : {}),
+    ...(extra.position ? { position: byKey(list, extra.position) } : {}),
+    params: list.filter((p) => p !== sw),
+  };
+}
+
+const eqList = (n: 1 | 2) => EQ_PARAMS.filter((p) => p.key.startsWith(`eq${n}.`));
+
+export const SECTIONS: readonly Section[] = [
+  section('pedalFx', 'Pedal FX', PEDAL_FX_PARAMS, { type: 'pedalFx.type', position: 'pedalFx.position' }),
+  section('eq1', 'EQ 1', eqList(1), { type: 'eq1.type', position: 'eq1.position' }),
+  section('eq2', 'EQ 2', eqList(2), { type: 'eq2.type', position: 'eq2.position' }),
+  section('sendReturn', 'Send/Return', SEND_RETURN_PARAMS, { position: 'sendReturn.position' }),
+  section('solo', 'Solo', SOLO_PARAMS),
+];
+
+export function sectionByKey(key: SectionKey): Section {
+  const s = SECTIONS.find((x) => x.key === key);
+  if (!s) throw new Error(`No section ${key}`);
+  return s;
+}

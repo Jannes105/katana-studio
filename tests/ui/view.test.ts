@@ -3,7 +3,16 @@ import { PATCH_BLOCKS } from '../../src/protocol/blocks';
 import { EFFECTS, NS_THRESHOLD, effectType } from '../../src/model/params';
 import { PatchImage } from '../../src/model/patch';
 import type { ConnectionState } from '../../src/state/connection';
-import { connectionDot, dimmed, effectRows, hasPatch, paramView, rememberedHere } from '../../src/ui/view';
+import { CHAIN_VARIANT, SECTIONS, sectionByKey } from '../../src/model/sections';
+import {
+  chainItems,
+  connectionDot,
+  dimmed,
+  effectRows,
+  hasPatch,
+  paramView,
+  rememberedHere,
+} from '../../src/ui/view';
 
 function image(threshold: number): PatchImage {
   const blocks = new Map(PATCH_BLOCKS.map((b) => [b.offset, new Array<number>(b.length).fill(0)]));
@@ -83,5 +92,53 @@ describe('view helpers', () => {
     const remembered = new Map([[2, [{ offset: NS_THRESHOLD.at, value: 70 }]]]);
     expect(rememberedHere({ ...base, remembered })).toEqual([]);
     expect(rememberedHere({ ...base, remembered, patchIndex: 2 })).toHaveLength(1);
+  });
+});
+
+describe('effects list in chain order (Phase 2)', () => {
+  const at = (def: { at: number } | undefined, v: number) => (img: PatchImage) =>
+    def ? img.with(def.at, [v]) : img;
+
+  it('follows chain variant and positions; the foot volume is not listed', () => {
+    expect(chainItems(base)).toEqual([
+      'pedalFx',
+      'booster',
+      'eq1',
+      'eq2',
+      'amp',
+      'mod',
+      'fx',
+      'sendReturn',
+      'delay',
+      'delay2',
+      'reverb',
+    ]);
+    let img = at(CHAIN_VARIANT, 8)(base.current);
+    img = at(sectionByKey('sendReturn').position, 1)(img);
+    img = at(sectionByKey('eq2').position, 1)(img);
+    expect(chainItems({ ...base, current: img })).toEqual([
+      'pedalFx',
+      'mod',
+      'fx',
+      'booster',
+      'delay',
+      'eq1',
+      'amp',
+      'eq2',
+      'delay2',
+      'reverb',
+      'sendReturn',
+    ]);
+  });
+
+  it('every section has its switch apart from its parameters; type and position where the amp has them', () => {
+    expect(SECTIONS.map((x) => x.key)).toEqual(['pedalFx', 'eq1', 'eq2', 'sendReturn', 'solo']);
+    for (const x of SECTIONS) {
+      expect(x.switch.key).toBe(`${x.key}.on`);
+      expect(x.params).not.toContain(x.switch);
+      if (x.type) expect(x.params).toContain(x.type);
+    }
+    expect(sectionByKey('solo').position).toBeUndefined();
+    expect(sectionByKey('eq2').type?.key).toBe('eq2.type');
   });
 });

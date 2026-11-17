@@ -1,6 +1,8 @@
 // What the screens show, derived from the connection state. Plain functions (no Svelte), so they are testable.
 
+import { chainOrder, type ChainBlock } from '../model/chain';
 import { EFFECTS, effectType } from '../model/params';
+import { CHAIN_VARIANT, sectionByKey } from '../model/sections';
 import { effectView, readRaw, type EffectView } from '../model/patch';
 import { writable, type ParamDef, type VariantGroup } from '../model/schema';
 import type { ByteChange, ConnectionState } from '../state/connection';
@@ -93,4 +95,24 @@ export function editable(s: ConnectionState, def: ParamDef): boolean {
 /** Values can be looked at but are frozen or about to change: shown dimmed. */
 export function dimmed(s: ConnectionState): boolean {
   return s.phase !== 'connected' || s.reading;
+}
+
+/** A line of the effects list in chain order. The foot volume has no page and is left out. */
+export type ChainItem = Exclude<ChainBlock, 'footVolume'>;
+
+/** The chain settings of the current patch (chain variant and positions), 0 where not read yet. */
+export function chainSettings(s: ConnectionState) {
+  const v = (def: ParamDef | undefined) => (def ? (readRaw(s.current, def) ?? 0) : 0);
+  return {
+    variant: Math.min(8, v(CHAIN_VARIANT)),
+    pedalFx: v(sectionByKey('pedalFx').position),
+    sendReturn: v(sectionByKey('sendReturn').position),
+    eq1: v(sectionByKey('eq1').position),
+    eq2: v(sectionByKey('eq2').position),
+  };
+}
+
+/** The blocks of the effects list, in the order the signal runs through them (PLAN 5, Phase 2). */
+export function chainItems(s: ConnectionState): ChainItem[] {
+  return chainOrder(chainSettings(s)).filter((b): b is ChainItem => b !== 'footVolume');
 }

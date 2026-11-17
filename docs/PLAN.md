@@ -811,7 +811,25 @@ Regler passen sich der Höhe an (46–100 px, Container-Einheiten), der Erklärt
 auf kleinen Bildschirmen werden Variationen und Typ-Zeile flacher. Gemessen im Browser über alle Seiten aller
 31 Mod-Typen, Booster, Delay, Delay 2 und Reverb: kein Scrollen bei 412×915, 375×812 und 375×667 (Regler bei den
 ersten beiden immer 100 px); bei 360×640 sind zwei Seiten mit zwei Auswahlzeilen (Pitch Shifter Voice 1: 25 px,
-DC-30: 8 px) zu hoch. Im Browser mit dem Mock durchgespielt; am Amp noch nicht.
+DC-30: 8 px) zu hoch. Im Browser mit dem Mock durchgespielt; am Amp noch nicht. Gemergt als #28.
+
+PR 3 (17.11.2026, Branch `claude/phase-2-sections`): **Neuer Tab „Kette“** (Wunsch 17.11.2026: der Effekte-Tab
+war mit allen Blöcken zu voll; er zeigt wieder nur Booster, Mod, FX, Delay, Reverb und Noise Suppressor). Der
+Ketten-Tab zeigt den **Signalweg senkrecht** (Entwurf A von drei klickbaren Entwürfen, Wunsch 17.11.2026: „wie in
+BTS visuell“; die Entwurfsseite ist wieder gelöscht, nie committet): von Input oben nach Speaker unten eine Linie
+durch alle Blöcke, der Amp als breiter Block, FV als kleine Marke, darunter Solo (`src/ui/ChainDiagram.svelte`).
+**Drag-and-Drop:** Block ziehen, die Kette zeigt live, wo er landet, und springt nur auf erlaubte Plätze
+(`placeBlock` in `src/model/chain.ts`: ändert nur die Einstellung des Blocks, also Kettenvariante oder Position,
+und lässt die übrigen Blöcke möglichst an ihrem Platz); Loslassen schreibt. **Antippen:** Leiste unten mit
+An/Aus, ▲▼ (`moveBlock`, ein Schritt) und „Seite“. Amp, Delay 2 und Reverb haben eine feste Stelle. Die frühere
+Kettenseite mit Knöpfen entfällt. Beide Tabs öffnen dieselben Seiten. **Neue Seiten** für
+EQ 1, EQ 2, Pedal FX, Solo und Send/Return mit derselben Seitenaufteilung wie die Effekte (`SECTIONS` in
+`src/model/sections.ts`: Schalter, Typ, Position, übrige Parameter). **„Mehr“ im Probe-Tab:** Contour-Typ 1–4
+der gewählten Contour und Cabinet Resonance (Vintage/Modern/Deep). **Kein Scrollen:** Die Blöcke der Kette teilen sich die Höhe (30–46 px, auf kleinen Bildschirmen ab 27 px);
+Ketten-Tab, Effekte-Tab, alle neuen Seiten (mit allen Typen) und „Mehr“ im Browser gemessen ohne Scrollen bei
+412×915, 375×812 und 375×667. Ziehen im Browser mit der Maus geprüft (Booster hinter FX, EQ 1 hinter den Amp). Testplan
+`docs/testplan/phase-2.md`, Version 0.5.0. Im Browser mit dem Mock durchgespielt; am Amp folgt der Test mit dem
+Release v0.5.0.
 
 ### Phase 3 – Steuerung und System
 - Schema-Probe für Assigns zuerst (siehe 4.4).
