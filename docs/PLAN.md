@@ -793,7 +793,26 @@ ab. Der Block steht nur wegen des gemeinsamen Formats in jedem Patch. Das Solo-D
 unserer Liste** (Backups und `.tsl` behalten den Block roh). Alles andere ist [C]
 (`protocol-notes.md` 2.8). **Folge für die Oberfläche:** Die Effekt-Seite zeigt Mod und FX jetzt schon mit den
 Reglern des aktiven Typs in der bisherigen einfachen Form (Regler, dann Auswahl), schreibbar; das richtige
-Bedienkonzept kommt mit PR 2. Im Browser mit dem Mock geprüft.
+Bedienkonzept kommt mit PR 2. Im Browser mit dem Mock geprüft. Gemergt als #27.
+
+PR 2 (17.11.2026, Branch `claude/phase-2-modfx`): **Entwürfe** A Seiten, B Gruppen, C Zeilen klickbar in
+`design.html` (nur Dev-Server, alle 31 Typen, echter Regler und echte Liste; danach gelöscht, steht in der
+Git-Geschichte). **Entschieden (17.11.2026): A Seiten.** Umgesetzt für alle Effekte mit Variationen
+(`src/ui/pages.ts`, getestet): höchstens 6 Regler je Seite (3 × 2), jede Gruppe (Voice 1, Low …) eigene Seite(n);
+Auswahlen, die für den ganzen Typ gelten (Type, Mode, Voice, Layer Mode), stehen über den Seiten. Reiter mit
+den Seitennamen, Punkte und Pfeile unten, seitlich wischen. Gruppen ohne Namen heißen „Allgemein“; bei Stimmen
+(Pitch Shifter, Harmonist) und Chorus kommen die Gruppen zuerst. Auswahlen mit mehr als vier Werten öffnen eine
+Liste. Neu im Schema: `showIf` (Voice 2 nur bei zwei Stimmen, User-Skala nur bei Harmony „USER“). Master Key
+steht beim Harmonist auf der Seite „Allgemein“. **Delay 2** ist ein zweiter Reiter auf der Delay-Seite (An/Aus,
+Hinweis auf die Reverb-Farbe, Typ, Regler), **Layer Mode** steht oben auf der Reverb-Seite; beide stellt der
+Amp gekoppelt nach (im Mock und in der Oberfläche geprüft). **Kein Scrollen** (Wunsch 17.11.2026, wie im
+Probe-Tab): Eine Seite fasst zwei Reglerreihen und eine Auswahlzeile (sonst eigene Seite, z. B. die fünf Schalter
+des SDE-3000); Auswahlen einzeilig (Name links); keine Abschnittstitel, Pfeile an den Enden der Reiterzeile; die
+Regler passen sich der Höhe an (46–100 px, Container-Einheiten), der Erklärtext erscheint nur bei viel Platz,
+auf kleinen Bildschirmen werden Variationen und Typ-Zeile flacher. Gemessen im Browser über alle Seiten aller
+31 Mod-Typen, Booster, Delay, Delay 2 und Reverb: kein Scrollen bei 412×915, 375×812 und 375×667 (Regler bei den
+ersten beiden immer 100 px); bei 360×640 sind zwei Seiten mit zwei Auswahlzeilen (Pitch Shifter Voice 1: 25 px,
+DC-30: 8 px) zu hoch. Im Browser mit dem Mock durchgespielt; am Amp noch nicht.
 
 ### Phase 3 – Steuerung und System
 - Schema-Probe für Assigns zuerst (siehe 4.4).

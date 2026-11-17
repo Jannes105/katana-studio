@@ -57,7 +57,12 @@ const en = {
     'The lit one is active on the amp; tap another to switch, like the button on the amp. Type and knobs below belong to the active one.',
   'fx.type': 'Type',
   'fx.knobs': 'Knobs',
-  'fx.knobsLaterPhase2': 'The knobs depend on the type; they come in a later phase.',
+  'fx.mainPage': 'Main',
+  'fx.pages': 'Pages',
+  'fx.prevPage': 'Previous page',
+  'fx.nextPage': 'Next page',
+  'fx.delay2Note':
+    'Delay 2 has no variation of its own: it follows the reverb ({colour}). Layer Mode on the reverb page decides whether it sounds.',
   'fx.typeNamesLater':
     'Type names follow once our own table of names exists; until then the number is shown.',
   'fx.nsNote': 'No variations. The same knobs are on the rehearsal tab.',
@@ -224,7 +229,12 @@ const de: Record<TextKey, string> = {
     'Die leuchtende ist am Amp aktiv; antippen schaltet um wie der Taster am Amp. Typ und Regler darunter gehören zur aktiven.',
   'fx.type': 'Typ',
   'fx.knobs': 'Regler',
-  'fx.knobsLaterPhase2': 'Die Regler hängen vom Typ ab; sie kommen in einer späteren Phase.',
+  'fx.mainPage': 'Allgemein',
+  'fx.pages': 'Seiten',
+  'fx.prevPage': 'Vorige Seite',
+  'fx.nextPage': 'Nächste Seite',
+  'fx.delay2Note':
+    'Delay 2 hat keine eigene Variation: Es folgt dem Reverb ({colour}). Layer Mode auf der Reverb-Seite entscheidet, ob es klingt.',
   'fx.typeNamesLater':
     'Typnamen folgen, sobald unsere eigene Namenstabelle steht; bis dahin steht die Nummer da.',
   'fx.nsNote': 'Keine Variationen. Dieselben Regler stehen auch im Probe-Tab.',

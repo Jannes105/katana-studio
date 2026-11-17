@@ -49,6 +49,11 @@ export interface ParamDef {
    */
   readonly visibleFor?: readonly number[];
   /**
+   * Shown only while these sibling parameters (keys in the same list, e.g. `harmonist.voice`) have one of the
+   * given raw values; all conditions must hold. Presentation only, like visibleFor.
+   */
+  readonly showIf?: readonly { readonly key: string; readonly values: readonly number[] }[];
+  /**
    * Group inside an effect page, e.g. `Voice 1` or `Low` (presentation only: how the UI splits a long list of
    * knobs into groups or pages).
    */
@@ -74,6 +79,14 @@ export function writable(def: ParamDef): boolean {
 /** True if a VariantGroup parameter is shown for the given type (raw). */
 export function visibleFor(def: ParamDef, type: number | undefined): boolean {
   return def.visibleFor === undefined || (type !== undefined && def.visibleFor.includes(type));
+}
+
+/** True if the showIf conditions of a parameter hold; `valueOf` gives the raw value of a sibling by key. */
+export function shownWith(def: ParamDef, valueOf: (key: string) => number | undefined): boolean {
+  return (def.showIf ?? []).every((c) => {
+    const v = valueOf(c.key);
+    return v !== undefined && c.values.includes(v);
+  });
 }
 
 /** Byte length of an encoding. */
