@@ -8,6 +8,15 @@ surprises below each item; captures from the log screen ("Copy capture") go into
 Done criterion from PLAN "Phase 1c": saving is only possible after a confirmation, what is read back is
 identical, a simulated fault shows a message, and a patch from a backup can be restored.
 
+## Results
+
+**2026-11-17, v0.4.0 at the amp with the phone, one pass through everything:** seemed to work. Observed: saving
+and pulling the cable right away, then plugging in again, ends with the channel saved. That is expected: the amp
+saves within about 2 ms of PATCH_WRITE (protocol-notes 2.15), long before the cable is out; the pull only
+interrupts the app's check, and after reconnecting the app reads the slot again (it never writes on its own).
+Also noticed: the page could be scrolled although it showed nothing more; fixed after v0.4.0 (only the content
+area scrolls when it does not fit).
+
 ## Before you start
 
 - [ ] With the installed v0.3.0: "Back up everything" and keep the file (the way back is the .tsl import into

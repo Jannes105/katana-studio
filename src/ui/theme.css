@@ -27,6 +27,15 @@
   color-scheme: dark;
 }
 
+/* The page itself never scrolls (it held nothing more than the screen); only <main> scrolls when its content is
+   taller, e.g. the log. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
