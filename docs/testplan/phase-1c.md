@@ -75,7 +75,16 @@ in the connection window; automatic tests in `tests/state/saving.test.ts`). At t
       header shows whether the channel holds the change (Saved/Unsaved).
 - [ ] **Switch the channel on the amp right after tapping Save**: same banner, no crash.
 
-## 6. Open from earlier phases
+## 6. Rehearsal tab since v0.4.2
+
+- [ ] The rehearsal tab cannot be scrolled; header, knobs, quick switches, save buttons and tabs are all visible.
+- [ ] **NS on/off** below the knobs switches the noise suppressor with one tap (LED on the amp follows); changed
+      against the stored slot it has an orange ring.
+- [ ] **Contour** shows the selected contour and opens "More", like **More**. In "More": Noise Suppressor on/off,
+      Threshold and Release at the top, then Contour, Freq Shift, Resonance, power amp.
+- [ ] With a banner on top (remembered changes, "loaded"), the knobs get a little smaller instead of scrolling.
+
+## 7. Open from earlier phases
 
 - [ ] Rehearsal of 2 hours without hangs (1b), with saving in between: \_\_
 - [ ] On the phone, saving and loading a whole patch work as at the PC (protocol-notes 2.13 and 2.15 were measured

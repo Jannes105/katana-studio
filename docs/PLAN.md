@@ -701,7 +701,18 @@ den Kanal, merkt sich Ungespeichertes des Ziels als gemerkte Änderungen, schrei
 (readonly nie), liest zurück und vergleicht. Gespeichert wird nichts: Eine Leiste „… in B2 geladen · noch nicht
 gespeichert“ mit „Speichern“ führt in dieselbe Bestätigung wie der Speicherknopf. Testplan
 `docs/testplan/phase-1c.md`, Version 0.4.0. Im Browser mit dem Mock durchgespielt (Umbenennen, Datei laden in
-einen anderen Kanal, Speichern); am Amp folgt der Test mit dem Release v0.4.0.
+einen anderen Kanal, Speichern); am Amp folgt der Test mit dem Release v0.4.0. Gemergt als #23, Release
+v0.4.0 am 17.11.2026.
+
+**Test am Amp (17.11.2026, v0.4.0, Handy):** einmal alles durchgegangen, scheint zu klappen
+(`docs/testplan/phase-1c.md`). Danach: Die Seite ließ sich verschieben, obwohl nichts weiter kam; seit v0.4.1
+(#24, #25) scrollt nur noch der Inhaltsbereich. **Probe-Tab neu (Wunsch 17.11.2026, Variante C von vier
+Entwürfen):** oben nur Amp-Typ, Variation und die sechs Amp-Regler (bis 112 px); darunter drei Schnellschalter:
+**NS an/aus** (ein Tipp, wie bisher wichtigster Griff in der Probe), **Contour** (zeigt die Auswahl, öffnet
+„Mehr“) und **Mehr**. Threshold und Release wandern ins Fenster „Mehr“, oben über Contour, Resonance und
+Endstufe. Schnellschalter und Speicherknöpfe sitzen unten unter dem Daumen. Der Tab passt sich der Höhe an
+(Container-Einheiten): Wird es eng, fällt der Hinweis weg, dann werden die Regler kleiner (bis 64 px); im
+Browser von 360×640 bis 412×915 ohne Scrollen. Version 0.4.2.
 
 ### Phase 2 – Alle Klangparameter
 - Alle Effekttypen mit allen Parametern, alle Variationen.

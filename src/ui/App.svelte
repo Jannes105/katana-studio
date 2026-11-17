@@ -686,7 +686,9 @@
     background: none;
     color: var(--muted);
   }
+  /* A size container: the rehearsal tab fits itself into its height (cqh units in ProbeView). */
   main {
+    container-type: size;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
