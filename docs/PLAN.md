@@ -921,7 +921,21 @@ keins), u. a. ein Max über dem Zielbereich (Werkswert 127 bei „Preset“). **
 Effekt-Modus (1–4 und PANEL schalten Booster, Mod, FX, Delay, Reverb im aktuellen Patch), EFFECT lang in den
 Funktions-Modus, dessen Funktionen aus SYSTEM kommen (`10 00 22 00`, hier alle SOLO ON/OFF), PANEL lang wechselt
 die Bank. Folge: Für den GA-FC zählen beim Besitzer vor allem die **System**-Funktionen (PR 3); was die
-Patch-Funktionen GA-FC FS1–3 beim normalen GA-FC tun, ist offen.
+Patch-Funktionen GA-FC FS1–3 beim normalen GA-FC tun, ist offen. Gemergt als #30.
+
+PR 2 (17.11.2026, Branch `claude/phase-3-assign-ui`): **Entwürfe** A (Reiter „Steuerung“ auf jeder
+Effekt-Seite), B (eigener Tab), C (Übersicht im Effekte-Tab plus Reiter) klickbar in `design.html` (nur
+Dev-Server, gelöscht, nie committet). **Entschieden (17.11.2026): B.** Neuer fünfter Tab **„Steuerung“**
+(`src/ui/ControlView.svelte`) mit drei Bereichen: **Amp-Regler** (je Effekt das Ziel des Reglers am Amp, bei Mod
+und FX für den aktiven Typ der aktiven Variation), **Pedale** (EXP-Pedal, GA-FC EXP 1–3 mit Kurzinfo „Funktion ·
+Ziel“ und Bereich; Antippen öffnet Funktion, Ziel und Min/Max als Regler, Bereich und Anzeige folgen dem Ziel,
+Doppeltipp setzt zurück) und **Schalter** (GA-FC FS1–3 je Patch mit Hinweis auf den Funktions-Modus, Fußschalter
+Spitze/Ring). Auswahlen öffnen eine Liste. Zielnamen tragen jetzt die Gruppe („Low Rate“, „Voice 1 Pitch“), damit
+sie eindeutig sind (Test). Die Tab-Leiste hat fünf gleich breite Spalten (`minmax(0, 1fr)`, etwas kleinere
+Schrift); „Steuerung“ passt bei 375 px. **Kein Scrollen:** alle Bereiche und Pedal-Seiten im Browser gemessen bei
+412×915, 375×812 und 375×667. Im Browser mit dem Mock durchgespielt (Ziel wählen, Funktion und Ziel eines Pedals,
+Min/Max ziehen, Zielwechsel setzt Min/Max auf den vollen Bereich); am Amp noch nicht. Die GA-FC-Systemfunktionen
+(Funktions-Modus) kommen mit PR 3 in den Bereich „Schalter“.
 
 ### Phase 4 – Bibliothek und Austausch
 - Patch-Bibliothek auf dem Gerät (Dateien in einem sichtbaren Ordner, siehe 4.6), Ordner/Suche.
