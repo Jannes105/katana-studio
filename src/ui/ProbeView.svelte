@@ -17,7 +17,13 @@
     contourFreqShift,
   } from '../model/params';
   import type { ParamDef } from '../model/schema';
-  import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
+  import {
+    SELECTABLE_CHANNELS,
+    slotName,
+    type AmpConnection,
+    type ConnectionState,
+    type WriteResult,
+  } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
   import { t, type Language } from './i18n';
@@ -28,12 +34,15 @@
     lang,
     connection,
     onUndoable,
+    onSave,
   }: {
     s: ConnectionState;
     lang: Language;
     connection: AmpConnection;
     /** A reset or revert happened: the app offers "Undo" for a moment (PLAN 4.5 rule 7). */
     onUndoable: (text: string, result: WriteResult) => void;
+    /** "Save to A1": the app asks for confirmation first (PLAN 4.5 rule 10). */
+    onSave: () => void;
   } = $props();
   let more = $state(false);
 
@@ -52,6 +61,10 @@
     }
   }
   const unsaved = $derived(s.unsavedKnown && s.unsaved.length > 0);
+  /** A1–B4 can be saved, never the Panel (PLAN 1). */
+  const savable = $derived(
+    canEdit(s) && s.patchIndex !== null && (SELECTABLE_CHANNELS as readonly number[]).includes(s.patchIndex),
+  );
 
   const type = $derived(paramView(s, AMP_TYPE));
   const variation = $derived(paramView(s, AMP_VARIATION));
@@ -150,9 +163,14 @@
       <span class="moresub">{t(lang, 'probe.moreSub')}</span>
     </button>
   </div>
-  <button class="revert" disabled={!unsaved || !canEdit(s)} onclick={() => void revertAll()}>
-    {t(lang, 'action.revertAll')}
-  </button>
+  <div class="actions">
+    <button class="revert" disabled={!unsaved || !canEdit(s)} onclick={() => void revertAll()}>
+      {t(lang, 'action.revertAll')}
+    </button>
+    <button class="save" class:primary={unsaved} disabled={!savable} onclick={onSave}>
+      {s.saving ? t(lang, 'save.running') : t(lang, 'action.save', { slot: slotName(s.patchIndex) })}
+    </button>
+  </div>
   <p class="hint">{t(lang, 'probe.hint')}</p>
 </div>
 
@@ -237,14 +255,27 @@
   button.choice:not(:disabled):active {
     background: var(--panel-2);
   }
-  .revert {
-    display: block;
-    width: 100%;
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     margin-top: 10px;
+  }
+  .revert,
+  .save {
     background: none;
     border: 1px solid var(--faint);
     color: var(--fg);
     font-weight: 600;
+  }
+  .save {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .save.primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
   }
   .selector {
     display: grid;

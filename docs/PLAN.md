@@ -112,11 +112,10 @@ Lesevorgang liefert oft mehrere Pakete; unbenutzte Bytes im letzten Paket sind *
 
 **Sende-Warteschlange** (`src/protocol/queue.ts`; liegt im Protokoll, weil sie Antworten über Adressen und
 Blocktabelle zuordnet, und `midi/` nichts aus `protocol/` laden darf. Regeln am 16.11.2026 festgelegt):
-- **Kein fester Abstand für kleine Nachrichten** (gemessen, `protocol-notes.md` 2.13): Der Amp nahm 20 DT1 ohne Pause
-  an und beantwortete 30 RQ1 hintereinander vollständig. Die 20 ms von BTS entfallen. Für **große DT1** (ganze Blöcke,
-  Zurückspielen in 1c) bleibt vorerst der BTS-Abstand (20 ms plus Länge ÷ 3,125 ms), bis das gemessen ist. Am Handy
-  wird der Test einmal mit der Test-APK wiederholt. „Groß“ heißt: **mehr als 16 Datenbytes** (der Patch-Name
-  mit 16 Bytes läuft also ohne Abstand).
+- **Kein fester Abstand** (gemessen, `protocol-notes.md` 2.13): Der Amp nahm 20 DT1 ohne Pause an und beantwortete
+  30 RQ1 hintereinander vollständig. Auch **große DT1** brauchen keinen Abstand (gemessen 17.11.2026): alle 78
+  schreibbaren Blöcke eines Patches (2643 Bytes, bis 225 je DT1) kamen ohne Pause in 155 ms unverändert an. Der
+  BTS-Abstand (20 ms plus Länge ÷ 3,125 ms) entfällt damit ganz. Am Handy wird das einmal im Testplan 1c geprüft.
 - Zum Transport ist immer nur **ein Sendevorgang** unterwegs; was solange wartet, wird bei Bedarf ersetzt (siehe unten).
 - Der Amp quittiert einen geschriebenen Wert **nicht** und meldet ihn auch nicht zurück (kein Echo). Geprüft wird
   nur durch Zurücklesen. Eine Antwort zeigt den Stand zum Zeitpunkt der Antwort, nicht der Anfrage.
@@ -217,9 +216,12 @@ nötig ist es nicht.
   Zeit. Auf Android gibt es aber kein verlässliches „App wird beendet“, und nach dem Abziehen lässt sich nichts mehr senden.
   **„Editor-Modus bleibt an“ ist also der Normalfall.** Gemessen: Das ist unschädlich, der Amp lief so lange normal.
   Abmelden bleibt deshalb ein Versuch ohne Gewähr.
-- **Befehle:** Patch wählen (`PATCH_SELECT`), speichern (`PATCH_WRITE`, der Amp quittiert per DT1 an derselben Adresse),
-  löschen. BTS sendet nach dem Speichern und nach dem Zurückspielen zusätzlich `PREVIEW_MUTE` und `EXPORT`. Deren Wirkung
-  klären wir durch eigene Versuche, denn BTS selbst lässt sich nicht mitschneiden (Port exklusiv, USBPcap erfolglos).
+- **Befehle:** Patch wählen (`PATCH_SELECT`), speichern (`PATCH_WRITE`), löschen. **Speichern vom PC gemessen
+  (17.11.2026, `protocol-notes.md` 2.15):** DT1 `7F 00 01 04` = `00 nn` speichert den aktuellen Patch in Platz `nn`;
+  der Amp quittiert nach rund 2 ms mit einem DT1 an derselben Adresse (zweimal kurz hintereinander), danach folgen
+  die Status-Bytes wie beim Speichern am Amp. Der Platz war danach jedes Mal gleich dem aktuellen Patch, die anderen
+  Plätze unberührt. BTS sendet danach noch `PREVIEW_MUTE` (`7F 01 01 09`) und `EXPORT` (`7F 01 01 0A`); nötig ist
+  das nicht, die App lässt beides weg (Wirkung klären wir in Phase 4).
 - **Meldungen des Amps** (mit Editor-Modus an, gemessen, `protocol-notes.md` Q1–Q3):
   - *Kanalwechsel am Amp:* fünf Status-Bytes `7F 01 01 01`–`05`, dann `01`–`04` noch einmal, dann DT1 `00 00 00 00`
     mit der neuen Patchnummer (`00 0n`), alles in rund 100 ms. Der Patch-Inhalt kommt **nicht** mit, die App liest ihn.
@@ -332,6 +334,16 @@ auf; jedes Ergebnis trägt die vorherigen Werte und einen Zähler der Patchwechs
 `undo` verweigert (Regel 7). `selectChannel(1–8)` schickt `PATCH_SELECT`; nicht das Panel und nicht den aktiven
 Kanal (das würde den gespeicherten Platz neu laden und Ungespeichertes verlieren). Das Merken der Änderungen des
 verlassenen Kanals übernimmt die Patchwechsel-Meldung wie beim Wechsel am Amp.
+
+**Umgesetzt (1c, PR 1, 17.11.2026):** `save()` (Regel 10) speichert nur auf A1–B4 und nur den aktuellen Kanal:
+Schreiben sperren (`saving`, `canWrite()` ist dann falsch), `PATCH_WRITE` mit `allowPatchWrite`, auf die erste
+Quittung warten (2 s, die zweite wird ignoriert), den Platz zurücklesen und alle 80 Blöcke mit dem Patch zum
+Zeitpunkt des Speicherns vergleichen. Ergebnis: `saved`, `mismatch` (mit Blöcken), `no-ack` (dann wird der Platz
+neu gelesen), `unchecked` (Zurücklesen fehlgeschlagen), `aborted` (Kanalwechsel, Kabel) oder `refused` (nichts
+gesendet). Die Warteschlange lehnt `PATCH_WRITE` auf Index 0 und 9 immer ab. **Ganze Blöcke:** `revertAll` und
+`restoreRemembered` schreiben jetzt jeden abweichenden Block roh (`writeBytes(…, true)`), auch Bytes außerhalb
+unserer Liste; die beiden readonly-Blöcke nie. Das ist eine bewusste Ausnahme von 4.4: Die Bytes stammen aus dem
+gespeicherten Platz des Amps oder aus seinen eigenen Meldungen. `undo` schreibt auf dieselbe Art zurück.
 
 ### 4.6 Storage (`src/storage/`)
 
@@ -651,6 +663,31 @@ Amp folgt der Test mit dem Release v0.3.0 (Tag nach dem Merge).
 *Fertig, wenn:* Speichern nur nach Bestätigung möglich ist, das Zurückgelesene identisch ist, ein simulierter Fehler eine
 Meldung zeigt und ein Patch aus dem Backup zurückgespielt werden kann.
 
+*Pull Requests (abgestimmt 17.11.2026):* zwei. 1. **Messung und Speichern:** Prüfwerkzeug und Messung am Amp,
+Warteschlange ohne Abstand, `save()` im State (Bestätigung, Quittung, Zurücklesen, Vergleich), Fehler im Mock zum
+Einschalten, „Speichern“ im Probe-Tab mit Bestätigungsfenster, Backup-Angebot. 2. **Zurückspielen und Abschluss:**
+Datei öffnen (Backup, Patch-Datei, vollständige `.tsl`), Patch und Ziel-Kanal wählen, ganze Blöcke in den aktuellen
+Patch schreiben (readonly nie), anhören, dann derselbe Weg wie Speichern; **Patch umbenennen** (Wunsch
+17.11.2026: Tippen auf den Namen im Kopf, 16 Zeichen ASCII 32–125, vorher kurzer Schreibtest des Namensblocks am
+Amp ohne `PATCH_WRITE`); Testplan `docs/testplan/phase-1c.md`, Version 0.4.0. **Entschieden (offen aus 1b):** „Alles zurück“ schreibt ganze abweichende Blöcke roh aus dem
+gespeicherten Platz (readonly nie), damit auch Bytes außerhalb unserer Liste zurückgehen (Mod-/FX-Regler am Amp);
+Zurückspielen nutzt denselben Weg. Doppeltipp bleibt pro Parameter.
+
+*Stand 1c:* Messung am Amp (17.11.2026, am PC über den Boss-Treiber, nach Komplett-Backup, alles auf B4):
+`tools/katana-probe.ps1 -BlockTest` (große DT1 bis 225 Bytes und ein ganzer Patch ohne Pause: angenommen, nur das
+geänderte Byte wirkt) und `-SaveTest -SaveTo B4 [-SaveChange]` (vier `PATCH_WRITE` nach deinem Ja: Quittung nach
+rund 2 ms, Platz jedes Mal gleich dem aktuellen Patch, alle zehn Plätze am Ende wie vorher). Ergebnisse
+`protocol-notes.md` 2.13 und 2.15.
+
+PR 1 (17.11.2026): Warteschlange ohne Abstand, `save()` und ganze Blöcke für „Alles zurück“ und „Zurückholen“
+(siehe 4.5 „Umgesetzt (1c, PR 1)“). Probe-Tab: unten „Alles zurück“ und **„Speichern auf A1“** nebeneinander;
+der Speicherknopf ist ausgefüllt bei Ungespeichertem, sonst umrandet, beim Panel gesperrt. Er öffnet ein
+Bestätigungsfenster mit Kanal und Patchname. Gibt es heute noch kein Backup (Datum des letzten „Alles sichern“
+lokal gemerkt), bietet das Fenster beim ersten Speichern der Sitzung „Erst sichern“ und „Ohne Backup speichern“
+an. Erfolg: kurzer Hinweis „Auf A1 gespeichert · geprüft“; Abweichung, fehlende Quittung, Abbruch: rote Leiste
+bis „OK“. Der Mock quittiert wie gemessen (zweimal) und hat im Verbindungsfenster Fehler zum Einschalten
+(„Keine Quittung“, „Falscher Inhalt“). Im Browser mit dem Mock durchgespielt; am Amp noch nicht.
+
 ### Phase 2 – Alle Klangparameter
 - Alle Effekttypen mit allen Parametern, alle Variationen.
 - Contour, Pedal FX, Solo, Send/Return, EQ (parametrisch und 10-Band), Effektkette.
@@ -717,10 +754,10 @@ Die Workflows lesen ihn aus den Geheimnissen `ANDROID_KEYSTORE_BASE64`, `ANDROID
 ## 8. Offen
 
 - Am Handy (Rest von 0a, siehe 9.2 C): Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne über den Amp.
-- Am Amp: große DT1 ohne Abstand (vor 1c).
-- Am Handy: die Sendetests aus `protocol-notes.md` 2.13 einmal mit der Test-APK wiederholen.
-- Später: `PATCH_WRITE` vom PC aus (vor 1c), Wirkung von `EXPORT` und `PREVIEW_MUTE` (Phase 4), Ort der
-  Firmware-Version (bisher nicht gefunden, kein Hindernis).
+- Am Handy: die Sendetests aus `protocol-notes.md` 2.13 (auch große DT1) einmal wiederholen (Testplan 1c).
+- Später: Wirkung von `EXPORT` und `PREVIEW_MUTE` (Phase 4), Ort der Firmware-Version (bisher nicht gefunden, kein
+  Hindernis).
+- *Erledigt 17.11.2026:* große DT1 ohne Abstand und `PATCH_WRITE` vom PC aus (`protocol-notes.md` 2.13, 2.15).
 - **Entfallen:** Tuner-Daten (dir ist kein Tuner am Amp bekannt; nur falls sich doch einer findet, wird es nachgeholt).
 - **Geklärt** (4.2, 4.2b, 4.3): USB-Werte, Bereichsanfragen und Lesezeiten an PC und Handy, Lesen ohne Editor-Modus,
   Editor-Modus ist Pflicht und darf an bleiben, Meldungen bei Kanalwechsel, Reglern und Speichern, Zuordnung A1–B4,

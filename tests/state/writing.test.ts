@@ -65,7 +65,7 @@ describe('writing: back to the stored state (rule 7)', () => {
     expect(amp.received.length).toBe(before);
   });
 
-  it('revert all writes every changed parameter back, a time as a whole, and counts what it cannot write', async () => {
+  it('revert all writes every changed byte back as whole blocks, bytes outside our list too; undo the same way', async () => {
     const { amp, connection } = await started();
     const storedTime = readRaw(connection.state.stored, DELAY_TIME);
     void connection.setValue(NS_THRESHOLD, 70);
@@ -80,8 +80,34 @@ describe('writing: back to the stored state (rule 7)', () => {
     expect(amp.peek(NS)).toEqual([40]);
     expect(amp.peek(GAIN)).toEqual([readRaw(connection.state.stored, AMP_GAIN)]);
     expect(readRaw(connection.state.current, DELAY_TIME)).toBe(storedTime);
-    expect(result?.skipped).toBe(1); // the mod byte: not in our list, left alone (PLAN 4.4)
-    expect(connection.state.unsaved).toEqual([MOD_BYTE]);
+    expect(result?.skipped).toBe(0);
+    expect(result?.wholeBlocks).toBe(true);
+    expect(amp.peek(ADDR.currentPatch + MOD_BYTE)).toEqual(connection.state.stored.read(MOD_BYTE, 1));
+    expect(connection.state.unsaved).toEqual([]);
+    // Whole blocks went out: the DT1 for the mod block starts at the block, with all 225 bytes.
+    const modBlock = amp.received
+      .map((m) => parseMessage(m))
+      .find((m) => m.type === 'dt1' && m.address === ADDR.currentPatch + addr(0, 0, 0x1c, 0));
+    expect(modBlock?.type === 'dt1' && modBlock.data.length).toBe(225);
+
+    if (!result) throw new Error('no result');
+    await connection.undo(result);
+    await tick(20);
+    expect(amp.peek(NS)).toEqual([70]);
+    expect(connection.state.unsaved).toContain(MOD_BYTE);
+  });
+
+  it('revert all never writes the read-only knob blocks', async () => {
+    const { amp, connection } = await started();
+    const knobBlock = addr(0, 0x01, 0x1c, 0);
+    amp.turnKnob(ADDR.currentPatch + knobBlock, 77);
+    await tick(400);
+    expect(connection.state.unsaved).toEqual([knobBlock]);
+    const before = amp.received.length;
+    const result = await connection.revertAll();
+    await tick(20);
+    expect(result?.skipped).toBe(1);
+    expect(amp.received.length).toBe(before);
   });
 
   it('undo is refused after a patch change', async () => {

@@ -9,6 +9,12 @@ Done criterion from PLAN "Phase 1b": a rehearsal of 2 hours runs without hangs, 
 a channel change drops waiting values, and a pulled cable freezes the values and leads to reading again without
 writing.
 
+## Results
+
+**2026-11-16, v0.3.0 at the amp with the phone, rough run:** everything seemed to work (writing knobs, types,
+variations and effect switches, double tap and "Revert all" with Undo, restoring remembered changes, channel
+select). Not ticked item by item; the 2-hour rehearsal and the timings of section 5 are still open.
+
 ## Before you start
 
 - [ ] With the installed v0.2.0: "Back up everything" and keep the file (the way back is the .tsl import into

@@ -15,14 +15,34 @@
   import { createApp } from './setup';
   import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
   import { canEdit, hasPatch, rememberedHere } from './view';
-  import { SELECTABLE_CHANNELS, type WriteResult } from '../state/connection';
+  import { SELECTABLE_CHANNELS, slotName, type SaveResult, type WriteResult } from '../state/connection';
+  import type { SaveFault } from '../mock/mock-amp';
 
   type Page = 'probe' | 'fx' | 'log';
 
   /** How long "Undo" stays offered after a reset, revert or restore (PLAN 4.5 rule 7). */
   const UNDO_MS = 6000;
+  /** How long "Saved · checked" stays; problems stay until dismissed. */
+  const SAVED_NOTE_MS = 4000;
 
   const LANG_KEY = 'katana-studio.lang';
+  /** Local date (YYYY-MM-DD) of the last complete backup (PLAN 1c: offer a backup if there is none from today). */
+  const BACKUP_KEY = 'katana-studio.lastBackup';
+  const today = (): string => new Date().toLocaleDateString('sv');
+  function backupToday(): boolean {
+    try {
+      return localStorage.getItem(BACKUP_KEY) === today();
+    } catch {
+      return false;
+    }
+  }
+  function rememberBackup(): void {
+    try {
+      localStorage.setItem(BACKUP_KEY, today());
+    } catch {
+      // not remembered: the next save offers a backup again
+    }
+  }
   function initialLanguage(): Language {
     try {
       const v = localStorage.getItem(LANG_KEY);
@@ -62,6 +82,51 @@
     const result = await connection.restoreRemembered();
     if (result) offerUndo(t(lang, 'undo.restore'), result);
   }
+  // ---- saving (PLAN 4.5 rule 10) ----
+  /** The channel the open confirmation is for; null = closed. */
+  let saveFor = $state<number | null>(null);
+  /** Offer a backup in the confirmation: once per session, if there is none from today. */
+  let saveOffer = $state(false);
+  let backupOffered = false;
+  /** Outcome of the last save: success disappears by itself, problems stay until dismissed. */
+  let saveNote = $state<{ ok: boolean; text: string } | null>(null);
+  let saveNoteTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function openSave(): void {
+    if (s.patchIndex === null) return;
+    saveOffer = !backupOffered && !backupToday();
+    if (saveOffer) backupOffered = true;
+    fileNote = null;
+    saveFor = s.patchIndex;
+  }
+  async function backupBeforeSave(): Promise<void> {
+    await backupAll();
+    if (fileNote?.ok) saveOffer = false;
+  }
+  async function confirmSave(): Promise<void> {
+    const index = saveFor;
+    saveFor = null;
+    if (index === null || index !== s.patchIndex) return;
+    showSaveNote(await connection.save());
+  }
+  function showSaveNote(r: SaveResult): void {
+    clearTimeout(saveNoteTimer);
+    const slot = r.kind === 'refused' ? '' : slotName(r.index);
+    const text = {
+      saved: t(lang, 'save.saved', { slot }),
+      mismatch: t(lang, 'save.mismatch', {
+        slot,
+        count: String(r.kind === 'mismatch' ? r.blocks.length : 0),
+      }),
+      'no-ack': t(lang, 'save.noAck', { slot }),
+      unchecked: t(lang, 'save.unchecked', { slot }),
+      aborted: t(lang, 'save.aborted', { slot }),
+      refused: t(lang, 'save.refused'),
+    }[r.kind];
+    saveNote = { ok: r.kind === 'saved', text };
+    if (r.kind === 'saved') saveNoteTimer = setTimeout(() => (saveNote = null), SAVED_NOTE_MS);
+  }
+
   async function pickChannel(index: number): Promise<void> {
     channelsOpen = false;
     if (index !== s.patchIndex) await connection.selectChannel(index);
@@ -72,6 +137,7 @@
   $effect(() => {
     void channel;
     undoable = null;
+    saveFor = null; // a confirmation belongs to the channel it was asked for
   });
   /** Result of the last backup or export, shown in the connection sheet. */
   let fileNote = $state<{ ok: boolean; text: string } | null>(null);
@@ -81,6 +147,7 @@
     try {
       const file = await connection.readBackup(fileMeta(s));
       await exportFile(file, t(lang, 'backup.title'));
+      rememberBackup();
       fileNote = { ok: true, text: t(lang, 'backup.done') };
     } catch (error) {
       fileNote = { ok: false, text: error instanceof Error ? error.message : String(error) };
@@ -149,6 +216,19 @@
   }
 
   const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString();
+  let mockFault = $state<SaveFault>('none');
+  function setMockFault(f: SaveFault): void {
+    mockFault = f;
+    if (app.mock) app.mock.amp.saveFault = f;
+  }
+  const FAULTS: readonly {
+    fault: SaveFault;
+    key: 'mock.faultNone' | 'mock.faultNoAck' | 'mock.faultWrong';
+  }[] = [
+    { fault: 'none', key: 'mock.faultNone' },
+    { fault: 'no-ack', key: 'mock.faultNoAck' },
+    { fault: 'wrong-content', key: 'mock.faultWrong' },
+  ];
 
   onMount(() => {
     void connection.start();
@@ -170,6 +250,12 @@
   {/if}
   {#if s.readOnly && s.phase === 'connected'}
     <div class="banner warn">{t(lang, 'banner.readOnly')}</div>
+  {/if}
+  {#if saveNote && !saveNote.ok}
+    <div class="banner error" role="alert">
+      <span class="grow">{saveNote.text}</span>
+      <button onclick={() => (saveNote = null)}>{t(lang, 'action.ok')}</button>
+    </div>
   {/if}
   {#if remembered.length > 0 && page === 'probe' && s.patchIndex !== null}
     {@const index = s.patchIndex}
@@ -206,7 +292,7 @@
         {/if}
       </div>
     {:else if page === 'probe'}
-      <ProbeView {s} {lang} {connection} onUndoable={offerUndo} />
+      <ProbeView {s} {lang} {connection} onUndoable={offerUndo} onSave={openSave} />
     {:else if page === 'fx'}
       <EffectsView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else}
@@ -214,7 +300,11 @@
     {/if}
   </main>
 
-  {#if undoable}
+  {#if saveNote?.ok}
+    <div class="toast saved" role="status">
+      <span class="grow">{saveNote.text}</span>
+    </div>
+  {:else if undoable}
     <div class="toast" role="status">
       <span class="grow">{undoable.text}</span>
       <button onclick={() => void undo()}>{t(lang, 'action.undo')}</button>
@@ -241,6 +331,42 @@
     </button>
   </nav>
 </div>
+
+{#if saveFor !== null}
+  {@const slot = slotName(saveFor)}
+  <Sheet
+    title={t(lang, 'save.title', { slot })}
+    closeLabel={t(lang, 'sheet.close')}
+    onClose={() => (saveFor = null)}
+  >
+    <p class="detail">{t(lang, 'save.text', { name: s.patchName?.trim() ?? '', slot })}</p>
+    {#if saveOffer}
+      <p class="detail warntext">{t(lang, 'save.noBackup')}</p>
+      <div class="pair">
+        <button disabled={s.backingUp || !canEdit(s)} onclick={() => void confirmSave()}>
+          {t(lang, 'save.withoutBackup')}
+        </button>
+        <button
+          class="primary"
+          disabled={s.backingUp || s.phase !== 'connected'}
+          onclick={() => void backupBeforeSave()}
+        >
+          {s.backingUp ? t(lang, 'backup.running') : t(lang, 'save.backupFirst')}
+        </button>
+      </div>
+    {:else}
+      <div class="pair">
+        <button onclick={() => (saveFor = null)}>{t(lang, 'save.cancel')}</button>
+        <button class="primary" disabled={!canEdit(s)} onclick={() => void confirmSave()}>
+          {t(lang, 'save.confirm')}
+        </button>
+      </div>
+    {/if}
+    {#if fileNote}
+      <p class="detail" class:error={!fileNote.ok}>{fileNote.text}</p>
+    {/if}
+  </Sheet>
+{/if}
 
 {#if channelsOpen}
   <Sheet
@@ -347,6 +473,14 @@
         {:else}
           <button onclick={() => mock.unplug()}>{t(lang, 'mock.unplug')}</button>
         {/if}
+      </div>
+      <p class="sublabel">{t(lang, 'mock.saveFault')}</p>
+      <div class="faults">
+        {#each FAULTS as f (f.fault)}
+          <button class:on={mockFault === f.fault} onclick={() => setMockFault(f.fault)}
+            >{t(lang, f.key)}</button
+          >
+        {/each}
       </div>
     {/if}
 
@@ -533,6 +667,30 @@
     align-items: center;
     gap: 8px;
     font-size: 0.9rem;
+  }
+  .toast.saved {
+    box-shadow:
+      inset 3px 0 0 var(--ok),
+      0 4px 16px rgb(0 0 0 / 50%);
+    min-height: 48px;
+  }
+  .warntext {
+    color: var(--warn);
+  }
+  .faults {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .faults button {
+    min-height: 44px;
+    padding: 0 6px;
+    font-size: 0.8rem;
+  }
+  .faults button.on {
+    border: 2px solid var(--accent);
+    color: var(--accent);
   }
   .toast button {
     background: none;

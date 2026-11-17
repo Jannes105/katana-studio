@@ -3,8 +3,8 @@
 //  1. Writing before reading: a DT1 never waits for an open RQ1.
 //  2. Only one send is in flight to the transport; a waiting DT1 with the same address and length is replaced
 //     by the newer one (slider values coalesce).
-//  3. After a DT1 with more than 16 data bytes the BTS gap applies (20 ms + message length / 3.125 ms) until
-//     large writes are measured; small messages go out without a gap (protocol-notes 2.13).
+//  3. No gap between messages, small or large: whole blocks up to 225 bytes and a complete patch in a burst were
+//     taken by the amp (protocol-notes 2.13, measured 2026-11-17); the BTS gap is not used.
 //  4. Only one RQ1 (or identity request) is open. Replies are matched by address: a range request is complete
 //     once every expected block address has arrived (block table), a single read with the first DT1 at its
 //     address. A report from the amp inside the range counts as a reply; the newest value wins.
@@ -13,11 +13,13 @@
 //  6. clear() drops everything waiting and cancels the open request (patch change); late replies then arrive as
 //     plain reports.
 //  7. Every accepted incoming message goes to the listeners, replies and reports alike.
-//  8. Safety net: no DT1 into the stored slots and no PATCH_WRITE unless explicitly allowed.
+//  8. Safety net: no DT1 into the stored slots and no PATCH_WRITE unless explicitly allowed; PATCH_WRITE only
+//     onto A1–B4 (index 1–8), never the Panel or PREVIEW, even when allowed.
 //  9. Reads are sent in the order they were requested.
 
 import type { Transport } from '../midi/transport';
 import { ADDR, SIZE, formatAddress, storedPatchAddress, type Address } from './address';
+import { u2x4 } from './encoding';
 import { expectedBlockAddresses } from './blocks';
 import {
   IDENTITY_REQUEST,
@@ -32,13 +34,6 @@ import {
 
 export const PROGRESS_TIMEOUT_MS = 500;
 export const RETRIES = 1;
-/** DT1 with more data bytes than this get the BTS gap afterwards (rule 3). */
-export const LARGE_DT1_THRESHOLD = 16;
-
-/** BTS send pacing: 20 ms plus message length / 3.125 ms. */
-export function largeWriteGapMs(messageLength: number): number {
-  return 20 + messageLength / 3.125;
-}
 
 /** Stored slots, PREVIEW included: never written before Phase 4 (rule 8). */
 const STORED_SLOTS_START = ADDR.storedPatchBase;
@@ -142,7 +137,6 @@ export class SendQueue {
   private open: Request | undefined;
   private resendOpen = false;
   private pumping = false;
-  private gapUntil = 0;
   private closedReason: string | undefined;
   private readonly listeners = new Set<(m: ParsedMessage) => void>();
   private readonly unsubscribe: () => void;
@@ -222,11 +216,16 @@ export class SendQueue {
       if (this.closedReason !== undefined) return reject(new QueueClosedError(this.closedReason));
       if (this.deviceIdValue === undefined)
         return reject(new Error('Not identified yet: call identify() first'));
-      const blocked = this.checkWrite(address, data.length, options);
+      const blocked = this.checkWrite(address, data, options);
       if (blocked) return reject(new WriteBlockedError(blocked));
 
       // Rule 2: replace a waiting write with the same address and length.
-      const waiting = this.writes.find((w) => w.address === address && w.data.length === data.length);
+      // Not when a later waiting write overlaps it (e.g. a whole block): the order of the two must stay.
+      const at = this.writes.findIndex((w) => w.address === address && w.data.length === data.length);
+      const overlapsLater = this.writes
+        .slice(at + 1)
+        .some((w) => w.address < address + data.length && address < w.address + w.data.length);
+      const waiting = at >= 0 && !overlapsLater ? this.writes[at] : undefined;
       if (waiting) {
         waiting.data = data;
         waiting.settle.push({ resolve, reject });
@@ -253,13 +252,15 @@ export class SendQueue {
 
   // ---- internals ----
 
-  private checkWrite(address: Address, length: number, options: WriteOptions): string | undefined {
-    const end = address + length;
+  private checkWrite(address: Address, data: readonly number[], options: WriteOptions): string | undefined {
+    const end = address + data.length;
     if (!options.allowStoredSlots && address < STORED_SLOTS_END && end > STORED_SLOTS_START) {
       return `DT1 ${formatAddress(address)} lies in the stored slots`;
     }
-    if (!options.allowPatchWrite && address <= ADDR.patchWrite && end > ADDR.patchWrite) {
-      return 'PATCH_WRITE needs explicit confirmation';
+    if (address <= ADDR.patchWrite && end > ADDR.patchWrite) {
+      if (!options.allowPatchWrite) return 'PATCH_WRITE needs explicit confirmation';
+      const index = address === ADDR.patchWrite && data.length === 2 ? u2x4.decode([...data]) : -1;
+      if (index < 1 || index > 8) return 'PATCH_WRITE only onto A1–B4';
     }
     return undefined;
   }
@@ -291,8 +292,6 @@ export class SendQueue {
     // check, so a pump() call right after it cannot be lost.
     try {
       for (;;) {
-        const wait = this.gapUntil - Date.now();
-        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         if (this.closedReason !== undefined) return;
 
         // Rule 1: writes first, even while a request is open.
@@ -329,11 +328,6 @@ export class SendQueue {
     const bytes = buildDt1(deviceId, write.address, write.data);
     try {
       await this.transport.send(bytes);
-      // Rule 3: gap after a large DT1.
-      // Rounded up: timers take whole milliseconds and must not fire early.
-      if (write.data.length > LARGE_DT1_THRESHOLD) {
-        this.gapUntil = Date.now() + Math.ceil(largeWriteGapMs(bytes.length));
-      }
       for (const s of write.settle) s.resolve();
     } catch (error) {
       this.onDiagnostic?.({ kind: 'send-failed', what: `DT1 ${formatAddress(write.address)}`, error });

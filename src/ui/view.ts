@@ -74,7 +74,9 @@ export function rememberedHere(s: ConnectionState): readonly ByteChange[] {
 
 /** Controls can change the amp right now (mirrors AmpConnection.canWrite, from the state alone). */
 export function canEdit(s: ConnectionState): boolean {
-  return s.phase === 'connected' && !s.readOnly && !s.reading && !s.backingUp && s.current.complete;
+  return (
+    s.phase === 'connected' && !s.readOnly && !s.reading && !s.backingUp && !s.saving && s.current.complete
+  );
 }
 
 /** A control for this parameter is live: editing allowed and the parameter writable (PLAN 4.4). */
