@@ -12,8 +12,12 @@ import {
   NS_RELEASE,
   NS_SWITCH,
   NS_THRESHOLD,
+  PATCH_PARAMS,
   contourFreqShift,
 } from '../../src/model/params';
+import { EXP_INPUTS } from '../../src/model/assigns';
+import { SYSTEM_PARAMS } from '../../src/model/system';
+import { SYSTEM_SECTIONS } from '../../src/ui/system-pages';
 import { CABINET_RESONANCE, contourType, sectionByKey } from '../../src/model/sections';
 import { instanceParam, type ParamDef } from '../../src/model/schema';
 import { relativeDrag, LONG_PRESS_MS } from '../../src/ui/drag';
@@ -212,5 +216,48 @@ describe('long press (Phase 3a)', () => {
     node.dispatchEvent(pointer('pointermove', 12));
     vi.advanceTimersByTime(LONG_PRESS_MS * 2);
     expect(long).toBe(0);
+  });
+});
+
+describe('explanations for everything shown (Phase 3a, PR 2)', () => {
+  const shown: ParamDef[] = [
+    ...PATCH_PARAMS.filter((p) => p.control !== 'text'),
+    ...[...EFFECTS, DELAY2].flatMap((g) => g.params.map((p) => instanceParam(g, 0, p))),
+    ...SYSTEM_PARAMS,
+  ].filter((p) => !p.readonly);
+
+  it('every parameter the app shows has a text in both languages', () => {
+    expect(shown.length).toBeGreaterThan(1000);
+    for (const lang of LANGUAGES) {
+      const missing = shown.filter((p) => !helpFor(lang, p.key)).map((p) => p.key);
+      expect(missing, lang).toEqual([]);
+    }
+  });
+
+  it('chain blocks, expression inputs and system sections have a text', () => {
+    const blocks = ['pedalFx', 'booster', 'mod', 'fx', 'delay', 'eq1', 'eq2', 'amp', 'sendReturn'];
+    const keys = [
+      ...blocks.map((b) => `block.${b}`),
+      'block.footVolume',
+      'block.delay2',
+      'block.reverb',
+      ...EXP_INPUTS.map((i) => `ctl.input.${i.key}`),
+      ...SYSTEM_SECTIONS.map((s) => `system.section.${s}`),
+    ];
+    for (const lang of LANGUAGES)
+      for (const k of keys) expect(helpFor(lang, k), `${lang} ${k}`).toBeDefined();
+  });
+
+  it('bands, voices, inputs and notes share one text', () => {
+    expect(helpKeys('mod.0.chorus.highRate')).toContain('chorus.rate');
+    expect(helpKeys('fx.1.pitchShifter.voice2Pitch')).toContain('pitchShifter.voicePitch');
+    expect(helpKeys('mod.0.harmonist.userVoice1Fs')).toContain('harmonist.userVoice');
+    expect(helpKeys('mod.0.graphicEq.1khz')).toContain('geq.band');
+    expect(helpKeys('fx.2.parametricEq.lowMidQ')).toContain('peq.lowMidQ');
+    expect(helpKeys('assign.gafc.exp2.chorus.max')).toContain('assign.exp.max');
+    expect(helpKeys('assign.knobs.delay.target')).toContain('assign.knobs.target');
+    expect(helpKeys('system.midi.cc.gafcFs1')).toContain('midi.cc');
+    expect(helpKeys('system.lineOut.m2.micType')).toContain('lineOut.m.micType');
+    expect(helpFor('en', 'assign.exp.reverb.min')).toBe(HELP_TABLES.en['assign.exp.min']);
   });
 });

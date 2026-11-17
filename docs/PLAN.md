@@ -1015,7 +1015,22 @@ Kette und die Mod/FX-Regler kommen mit PR 2 (dort zeigt langes Drücken noch nic
 Erklärung“). **Tests:** gleiche Schlüssel, Längen, Suche mit Rückfall, Abdeckung der Grundlagen und aller Typen,
 Gesten (lange drücken ändert nichts, Ziehen verhindert die Erklärung, Doppeltipp bleibt, Klick wird geschluckt,
 Scrollen bricht ab). **Kein Scrollen:** die längsten Texte (EN und DE) im Fenster bei 375×667 gemessen, Probe-Tab
-bei 412×915, 375×812 und 375×667. Im Browser mit dem Mock durchgespielt; am Handy noch nicht.
+bei 412×915, 375×812 und 375×667. Im Browser mit dem Mock durchgespielt; am Handy noch nicht. Gemergt als #33.
+
+PR 2 (17.11.2026, Branch `claude/phase-3a-help-2`): **Texte** EN und DE für den Rest: Mod/FX-Regler aller Typen
+(gemeinsame Texte wie Rate, Depth, Resonance, Manual, Sens, Peak, Freq, Tone, Attack, Release, Threshold,
+Pedal Pos/Min/Max, Pitch, Feedback, Pre Delay plus eigene je Typ; von einem Subagenten vorgeschrieben, von Claude
+geprüft; Phaser 90E „Script“ bewusst ohne Richtung, weil nicht geprüft, welche Stellung die ältere Schaltung ist),
+Pedal FX, Solo, Send/Return, Kette (je Block), Steuerung (Amp-Regler-Ziel, Funktion, Ziel, Min, Max,
+Fußschalter, GA-FC FS und Funktions-Modus, Pedal-Eingänge) und System (Bereiche, Global EQ, USB, Line Out, Power
+Amp In, MIDI). **Gemeinsame Texte** über Aliase in `help.ts`: Chorus-Bänder, Stimmen von Pitch Shifter und
+Harmonist, User-Voice-Noten, Graphic/Parametric EQ des Mod/FX-Blocks auf die EQ-Texte, alle Assign-Felder je
+Effekt und Eingang, MIDI-CC/PC-Nummern. **Angebunden:** Tab Steuerung (Auswahlen, Min/Max, Zeilen der Pedale und
+System-Bereiche, System-Auswahlen und -Regler, Global-EQ-Schalter und -Speicher) und Tab Kette (lange drücken auf
+einen Block erklärt ihn; der Block wird weder verschoben noch ausgewählt). **Abdeckungstest:** jeder angezeigte
+Parameter (über 1000 inklusive Assigns und SYSTEM), jeder Block, jeder Pedal-Eingang und jeder System-Bereich hat
+einen Text in beiden Sprachen; welche Parameter nur über einen allgemeinen Text abgedeckt sind, wurde einmal
+durchgesehen. Testplan `docs/testplan/phase-3a.md`, Version 0.7.0.
 
 ### Phase 4 – Bibliothek und Austausch
 *Pausiert (17.11.2026):* Bibliothek, Komplett-Wiederherstellen und .tsl-Import macht der Besitzer eher am PC (dort
