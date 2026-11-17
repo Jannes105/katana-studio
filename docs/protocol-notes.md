@@ -101,7 +101,42 @@ cannot be told from small values.
 | `30 00 00 00` | a temporary area according to analysis; never read by us | [D] |
 | `7F 00 00 00` | command area, see 2.9 | [D], single addresses as marked there |
 
-The layout of SYSTEM (which block holds what) is not written down yet. [O]
+**Layout of SYSTEM** (local analysis of BOSS Tone Studio, 2026-11-17; block lengths as measured in 2.12; names
+as in its address map). Offsets from `10 00 00 00`. Our list is `src/model/system.ts` (129 parameters, compared
+entry by entry with the address map: same offset, size and range for all 129).
+
+**Writes to SYSTEM [C 2026-11-17]** (`katana-probe.ps1 -ParamTest -System -NoAsk [-AllTypes] -Only …`, PC, after
+a complete backup and a SYSTEM backup by the tool, agreed with the owner beforehand; captures
+`param-test-20261117-202428.json`, `…202529.json`, `…202750.json`): all 129 addresses in three groups (MIDI and
+GA-FC 34, USB/line out/power amp in 21, global EQ 74 including the bands of the type not selected) were written,
+read back, changed no other SYSTEM byte and were restored; SYSTEM was as at the start after each group. Nobody
+listened. Writing global EQ select or on/off changed nothing else (no coupled byte like layer mode in 2.8).
+
+**Kept over a power cycle [C 2026-11-17]**: GA-FC SW2 `10 00 22 01` set from 7 (SOLO) to 4 (DELAY TAP) by a
+single DT1 (`-SetOnly`, `set-20261117-202856.json`); after the owner switched the amp off and on, `10 00 22 00`
+read `07 04 07 07 07`. A DT1 to SYSTEM is stored at once; no save command (unlike PATCH_WRITE for patches).
+
+| Block | Name | Bytes | Content |
+|---|---|---|---|
+| `00 00` | COM | 1 | stereo expand 0/1; BOSS Tone Studio shows no control for it, not in our list |
+| `02 00` | USB_COM | 5 | +0 input level ("to effect level", raw = dB + 20), +1 effect out level, +2 mix level, +4 dry out level (0–100, shown ×2 %), +3 loopback 0/1 |
+| `04 00` | GLOBAL_COM | 2 | +0 global EQ on/off, +1 selected memory 0–2 |
+| `06 00` … `0A 00` | GLOBAL_EACH(1–3) | 2 | +0 position 0 INPUT, 1 OUTPUT, 2 LINE OUT, 3 SP OUT; +1 type 0 parametric, 1 GE-10 |
+| `0C 00` … `10 00` | GLOBAL_PEQ(1–3) | 11 | as the patch EQ (2.8): low cut, gains ±20 dB, freqs 0–27, Q 0–5, high cut, level |
+| `12 00` … `16 00` | GLOBAL_GE10(1–3) | 11 | ten bands and level, ±24 dB |
+| `18 00` | LINEOUT_COM | 3 | +0 custom memory M1/M2, +1 air feel mode (0 REC, 1 LIVE, 2 BLEND; BOSS Tone Studio lists REC, BLEND, LIVE), +2 custom on/off |
+| `1A 00`, `1C 00` | LINEOUT(1, 2) | 5 | custom M1/M2: mic type 0–4 (DYN57, DYN421, CND451, CND87, RBN121), mic distance 0–20 cm, mic position 0–10 cm, ambience pre-delay, ambience level |
+| `1E 00` | POWERAMPIN | 3 | HPF type 0–4 (flat, −6 … −24 dB/oct), HPF freq (raw = Hz − 1, 1–100 Hz), level ±20 dB |
+| `20 00` | POWERADJUST | 1 | power control 0–8; hidden for the KATANA-100 by BOSS Tone Studio's model table, not in our list |
+| `22 00` | GAFC | 5 | GA-FC function mode: SW1–SW4, PANEL, same ten functions as the patch's GA-FC FS1–3 (2.8) |
+| `24 00` | MIDI_COM | 1 | Rx channel 0–15 |
+| `26 00` | MIDI_CC | 19 | CC number per control: booster, mod, FX, delay, reverb, send/return, EXP pedal, GA-FC EXP 1–3, GA-FC FS1–3, GA-FC expand EXP 1–3 and FS1–3; raw 0–30 = CC#1–31, 31–62 = CC#64–95 |
+| `28 00` | MIDI_PC | 9 | program change number per channel (PANEL, A1–B4), raw = number − 1 |
+
+On the owner's amp (capture `katana-probe-20261117-181446.json`): global EQ on, memory 1 (parametric, output)
+with low cut and −6 dB low-mid; line out air feel LIVE, custom off; GA-FC SW1–4 and PANEL all SOLO ON/OFF (SW2 DELAY
+TAP since the power-cycle test above); MIDI
+and USB at the factory values.
 
 ### 2.7 Patch index and stored slots
 

@@ -7,6 +7,7 @@ import { MockDevice } from '../../src/mock/mock-device';
 import { AMP_GAIN, NS_THRESHOLD, EFFECTS, effectType } from '../../src/model/params';
 import { readRaw } from '../../src/model/patch';
 import { ASSIGN_PARAMS } from '../../src/model/assigns';
+import { SYSTEM_PARAMS } from '../../src/model/system';
 import { instanceParam, type ParamDef } from '../../src/model/schema';
 import { AmpConnection, slotName, type ConnectionState } from '../../src/state/connection';
 
@@ -349,5 +350,46 @@ describe('AmpConnection: disconnects and errors', () => {
     expect(entries.at(-1)).toBe('Amp unplugged');
     connection.clearLog();
     expect(entries).toEqual([]);
+  });
+});
+
+describe('AmpConnection: SYSTEM (Phase 3)', () => {
+  const sw2 = (): ParamDef => {
+    const d = SYSTEM_PARAMS.find((p) => p.key === 'system.gafc.sw2');
+    if (!d) throw new Error('no sw2');
+    return d;
+  };
+
+  it('reads SYSTEM after connecting', async () => {
+    const { amp, connection } = await started();
+    expect(connection.state.system.complete).toBe(true);
+    const reads = amp.received.map((m) => parseMessage(m)).filter((m) => m.type === 'rq1');
+    expect(reads.some((m) => m.type === 'rq1' && m.address === ADDR.system)).toBe(true);
+  });
+
+  it('writes a SYSTEM parameter at 10 00 xx xx, shows it at once, clamps it', async () => {
+    const { amp, connection } = await started();
+    void connection.setSystemValue(sw2(), 4);
+    expect(readRaw(connection.state.system, sw2())).toBe(4);
+    await tick(20);
+    expect(amp.peek(ADDR.system + sw2().at)).toEqual([4]);
+    void connection.setSystemValue(sw2(), 99);
+    await tick(20);
+    expect(amp.peek(ADDR.system + sw2().at)).toEqual([9]);
+  });
+
+  it('follows a SYSTEM report from the amp', async () => {
+    const { amp, connection } = await started();
+    amp.turnKnob(ADDR.system + sw2().at, 6);
+    await tick(20);
+    expect(readRaw(connection.state.system, sw2())).toBe(6);
+  });
+
+  it('never writes SYSTEM while it has not been read, or a parameter not confirmed', async () => {
+    const { amp, connection } = await started();
+    const before = amp.received.length;
+    void connection.setSystemValue({ ...sw2(), status: 'D' }, 2);
+    await tick(20);
+    expect(amp.received.length).toBe(before);
   });
 });

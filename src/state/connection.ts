@@ -133,6 +133,11 @@ export interface ConnectionState {
   readonly patchName: string | null;
   /** Raw bytes of the current patch (edit buffer). Kept, frozen, while disconnected. */
   readonly current: PatchImage;
+  /**
+   * SYSTEM (Phase 3): settings of the whole amp, read once after connecting and again on return to the
+   * foreground. The amp stores a write at once (protocol-notes 2.6), so there is no "unsaved" here.
+   */
+  readonly system: PatchImage;
   /** Raw bytes of the stored slot of `storedIndex`. */
   readonly stored: PatchImage;
   readonly storedIndex: number | null;
@@ -181,6 +186,7 @@ const INITIAL: ConnectionState = {
   patchIndex: null,
   patchName: null,
   current: PatchImage.EMPTY,
+  system: PatchImage.EMPTY_SYSTEM,
   stored: PatchImage.EMPTY,
   storedIndex: null,
   unsaved: [],
@@ -238,6 +244,8 @@ export class AmpConnection {
   private connecting = false;
   /** Time of the last own write per patch offset (rule 2). */
   private readonly lastLocalWrite = new Map<Address, number>();
+  /** Last own write per SYSTEM offset (rule 2 for SYSTEM). */
+  private readonly lastSystemWrite = new Map<Address, number>();
   private patchChangeTimer: ReturnType<typeof setTimeout> | undefined;
   private patchChangeSince = 0;
   private lastIncoming = 0;
@@ -317,8 +325,10 @@ export class AmpConnection {
         modelCode: g.modelCode,
         readOnly: g.readOnly,
         warnings: g.warnings,
+        system: PatchImage.EMPTY_SYSTEM,
       });
       await this.readCurrent();
+      await this.readSystem();
     } catch (error) {
       // Unplugged during the greeting: the detach already set "waiting"; that is not an error.
       if (isCancelled(error) && this.stateValue.phase === 'waiting') return;
@@ -386,7 +396,43 @@ export class AmpConnection {
     const s = this.stateValue;
     if (s.phase !== 'connected' || s.reading || this.patchChangePending()) return;
     this.addLog('info', 'Back in the foreground: reading again');
-    void this.readCurrent();
+    void this.readCurrent().then(() => this.readSystem());
+  }
+
+  /** Reads SYSTEM (one range request, 21 blocks); a failure is logged, the old values stay. */
+  async readSystem(): Promise<void> {
+    const queue = this.queue;
+    if (!queue || this.stateValue.phase !== 'connected') return;
+    try {
+      const reply = await queue.read(ADDR.system, SIZE.system);
+      const image = PatchImage.system(reply.blocks, ADDR.system);
+      if (!image.complete) {
+        this.addLog('warn', `SYSTEM read incomplete: ${image.size} of 21 blocks`);
+        return;
+      }
+      this.update({ system: image });
+    } catch (error) {
+      if (!isCancelled(error)) this.addLog('warn', `Reading SYSTEM failed: ${describe(error)}`);
+    }
+  }
+
+  /**
+   * Writes a SYSTEM parameter (raw, clamped to its range). Only confirmed parameters (status C), only once SYSTEM
+   * has been read; the amp keeps the value at once, for every channel (protocol-notes 2.6).
+   */
+  async setSystemValue(def: ParamDef, raw: number): Promise<void> {
+    const queue = this.queue;
+    if (!queue || !this.canWrite() || !writable(def) || !this.stateValue.system.complete) return;
+    const v = Math.min(def.max, Math.max(def.min, Math.round(raw)));
+    const data = encodeValue(def, v);
+    const now = this.now();
+    data.forEach((_, i) => this.lastSystemWrite.set(def.at + i, now));
+    this.update({ system: this.stateValue.system.with(def.at, data) });
+    try {
+      await queue.write(ADDR.system + def.at, data);
+    } catch (error) {
+      if (!isCancelled(error)) this.addLog('error', `Write failed: ${describe(error)}`);
+    }
   }
 
   /**
@@ -897,6 +943,19 @@ export class AmpConnection {
       const index = m.data.length === 2 ? u2x4.decode([...m.data]) : null;
       if (this.saveAck && index === this.saveAck.index) this.saveAck.settle(true);
       else if (!this.stateValue.saving) this.onSaved(m.data); // during our save: its second acknowledgement
+      return;
+    }
+    const sysOffset = m.address - ADDR.system;
+    if (sysOffset >= 0 && sysOffset < SIZE.system) {
+      // SYSTEM changed on the amp (or the reply of our read): applied except under the write guard (rule 2).
+      const system = this.stateValue.system;
+      const now = this.now();
+      const data = m.data.map((v, i) => {
+        const guardedUntil = (this.lastSystemWrite.get(sysOffset + i) ?? -Infinity) + ECHO_GUARD_MS;
+        return now < guardedUntil ? (system.read(sysOffset + i, 1)?.[0] ?? v) : v;
+      });
+      const next = system.with(sysOffset, data);
+      if (next !== system) this.update({ system: next });
       return;
     }
     if (this.storedCollector?.take(m.address, m.data)) return;

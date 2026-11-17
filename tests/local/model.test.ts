@@ -11,6 +11,7 @@ import { parseHex, parseMessage } from '../../src/protocol/sysex';
 import { parseCapture } from '../../src/mock/capture';
 import { AMP_TYPE_NAMES, EFFECTS, PATCH_PARAMS, VARIATION_PARAMS } from '../../src/model/params';
 import { PatchImage, patchView, readRaw } from '../../src/model/patch';
+import { SYSTEM_PARAMS } from '../../src/model/system';
 import { isCaptureFile } from '../helpers/capture-checks';
 
 const DIR = join(__dirname, '..', '..', 'captures');
@@ -93,5 +94,43 @@ describe.skipIf(files.length === 0)('parameter list against real captures (local
     const labels = new Set(all.map((x) => x.label));
     expect(labels).toContain(`slot ${PANEL_INDEX}`);
     expect(labels).toContain(`slot ${PREVIEW_INDEX}`);
+  });
+});
+
+/** Every complete SYSTEM image in the captures (range reads of 10 00 00 00). */
+function systemImages(file: string): PatchImage[] {
+  const capture = parseCapture(readFileSync(join(DIR, file), 'utf8'));
+  const blocks = new Map<number, readonly number[]>();
+  const out: PatchImage[] = [];
+  for (const e of capture.events) {
+    if (e.dir !== 'in') continue;
+    const m = parseMessage(parseHex(e.bytes));
+    if (m.type !== 'dt1' || m.address < ADDR.system || m.address >= ADDR.system + 0x4000) continue;
+    blocks.set(m.address, m.data);
+    const image = PatchImage.system(blocks, ADDR.system);
+    if (image.complete) {
+      out.push(image);
+      blocks.clear();
+    }
+  }
+  return out;
+}
+
+describe.skipIf(files.length === 0)('SYSTEM list against real captures (local only)', () => {
+  const all = files.flatMap((f) => systemImages(f).map((image) => ({ file: f, image })));
+
+  it('finds complete SYSTEM reads', () => {
+    expect(all.length).toBeGreaterThan(0);
+  });
+
+  it('every SYSTEM parameter lies in its range in every capture (PLAN 5, Phase 3)', () => {
+    const outside: string[] = [];
+    for (const { file, image } of all) {
+      for (const def of SYSTEM_PARAMS) {
+        const v = readRaw(image, def);
+        if (v === undefined || v < def.min || v > def.max) outside.push(`${file} ${def.key} = ${v}`);
+      }
+    }
+    expect(outside.slice(0, 20)).toEqual([]);
   });
 });

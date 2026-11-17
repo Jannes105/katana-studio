@@ -9,6 +9,7 @@ import { writeFileSync } from 'node:fs';
 import { CONTOUR_SELECT, DELAY2, EFFECTS, PATCH_PARAMS, contourFreqShift } from '../src/model/params';
 import { contourType, eqType, PEDAL_FX_TYPE } from '../src/model/sections';
 import { encodingSize, type ParamDef, type VariantGroup } from '../src/model/schema';
+import { SYSTEM_PARAMS, globalEqType } from '../src/model/system';
 
 interface Row {
   key: string;
@@ -17,6 +18,8 @@ interface Row {
   min: number;
   max: number;
   status: string;
+  /** 'system': `at` is from the SYSTEM base 10 00 00 00 (katana-probe.ps1 -System); otherwise the patch. */
+  area?: 'system';
   /** Fixed offset (patch parameters). */
   at?: number;
   /** Parameter of a variation: byte inside the block of the active variation. */
@@ -82,6 +85,14 @@ function variantRows(g: VariantGroup): void {
   }
 }
 for (const g of [...EFFECTS, DELAY2]) variantRows(g);
+
+// SYSTEM (Phase 3): fixed offsets from the SYSTEM base; global EQ memory m shows PEQ or GE-10 by its type.
+for (const p of SYSTEM_PARAMS) {
+  const r: Row = { ...base(p), area: 'system', at: p.at };
+  const m = /^system.globalEq.([123])./.exec(p.key)?.[1];
+  if (r.types && m) r.typeAt = globalEqType(Number(m) as 1 | 2 | 3).at;
+  rows.push(r);
+}
 
 const out = process.argv[2] ?? 'tools/param-list.json';
 writeFileSync(out, JSON.stringify({ generated: new Date().toISOString(), rows }, null, 1));

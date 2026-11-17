@@ -935,7 +935,28 @@ sie eindeutig sind (Test). Die Tab-Leiste hat fünf gleich breite Spalten (`minm
 Schrift); „Steuerung“ passt bei 375 px. **Kein Scrollen:** alle Bereiche und Pedal-Seiten im Browser gemessen bei
 412×915, 375×812 und 375×667. Im Browser mit dem Mock durchgespielt (Ziel wählen, Funktion und Ziel eines Pedals,
 Min/Max ziehen, Zielwechsel setzt Min/Max auf den vollen Bereich); am Amp noch nicht. Die GA-FC-Systemfunktionen
-(Funktions-Modus) kommen mit PR 3 in den Bereich „Schalter“.
+(Funktions-Modus) kommen mit PR 3 in den Bereich „Schalter“. Gemergt als #31.
+
+PR 3 (17.11.2026, Branch `claude/phase-3-system`): **SYSTEM-Layout** zugeordnet und in `protocol-notes.md` 2.6
+(21 Blöcke). **Liste** `src/model/system.ts`: 129 Parameter (USB, Global EQ mit drei Speichern, Line Out,
+Power Amp In, GA-FC-Funktions-Modus SW1–4/PANEL, MIDI-Kanal, CC- und PC-Nummern); nicht drin: Stereo Expand
+(BTS zeigt es beim KATANA-100 nicht) und Power Control (beim 100 ausgeblendet). Lokal mit der Adressliste von
+BTS verglichen (129 von 129 gleich), jeder Wert in den Mitschnitten in den Bereichen. **Prüfwerkzeug:**
+`-ParamTest -System` (nur mit `-Only`, sichert SYSTEM vorher, vergleicht am Ende) und `-SetOnly` (setzt und
+behält einen Wert). **Lauf am Amp** (17.11.2026, Claude am PC, nach Komplett-Backup, Umfang vorher mit dir
+abgestimmt): alle 129 Adressen in drei Gruppen einwandfrei, SYSTEM danach jeweils wie vorher. **Dauertest:** GA-FC
+SW2 auf DELAY TAP gesetzt, Amp aus und ein: bleibt. Ein DT1 auf SYSTEM wird also sofort gespeichert, ohne
+Speicherbefehl. **State:** SYSTEM als eigenes Abbild (`PatchImage` mit eigener Blocktabelle), gelesen nach dem
+Verbinden und bei Rückkehr in den Vordergrund, Meldungen des Amps werden übernommen, `setSystemValue` schreibt
+(nur [C], nur nach vollständigem Lesen); kein „ungespeichert“. Mock mit SYSTEM-Werkswerten. **Oberfläche:**
+Entwürfe A (vierter Bereich im Steuerung-Tab), B (Menü), C (Menü plus Global-EQ-Schnellschalter im Probe-Tab)
+klickbar (gelöscht, nie committet); **entschieden (17.11.2026): A.** Bereich **„System“** mit Global EQ (An/Aus,
+Speicher 1–3, Position, Typ, Regler auf Seiten), Line Out, USB, Power Amp In, MIDI (CC als Auswahlen, PC als
+Regler), je mit Kurzinfo und dem Hinweis „gilt für alle Kanäle · der Amp speichert sofort“
+(`src/ui/system-pages.ts`, getestet). Der Bereich **„Schalter“** zeigt oben den GA-FC-Funktions-Modus. Regler
+richten sich nach der Bildschirmhöhe (70–100 px). **Kein Scrollen:** alle 14 Ansichten gemessen bei 412×915,
+375×812 und 375×667. Im Browser mit dem Mock durchgespielt (Global EQ an, Speicher wechseln, Regler, GA-FC SW3).
+Testplan `docs/testplan/phase-3.md`, Version 0.6.0.
 
 ### Phase 4 – Bibliothek und Austausch
 - Patch-Bibliothek auf dem Gerät (Dateien in einem sichtbaren Ordner, siehe 4.6), Ordner/Suche.

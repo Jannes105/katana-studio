@@ -2,7 +2,7 @@
 // decoded view of what Phase 1a shows.
 
 import type { Address } from '../protocol/address';
-import { PATCH_BLOCKS, type Block } from '../protocol/blocks';
+import { PATCH_BLOCKS, SYSTEM_BLOCKS, type Block } from '../protocol/blocks';
 import { patchName, u4x4, u7 } from '../protocol/encoding';
 import {
   AMP_KNOBS,
@@ -17,7 +17,22 @@ import {
 } from './params';
 import { encodingSize, type ParamDef, type VariantGroup } from './schema';
 
-const BY_OFFSET = new Map<number, Block>(PATCH_BLOCKS.map((b) => [b.offset, b]));
+/** A block table (patch or SYSTEM) with a lookup by block start. */
+interface Layout {
+  readonly blocks: readonly Block[];
+  readonly byOffset: ReadonlyMap<number, Block>;
+}
+const layout = (blocks: readonly Block[]): Layout => ({
+  blocks,
+  byOffset: new Map(blocks.map((b) => [b.offset, b])),
+});
+const PATCH_LAYOUT = layout(PATCH_BLOCKS);
+const SYSTEM_LAYOUT = layout(SYSTEM_BLOCKS);
+
+function blockAt(l: Layout, offset: Address): Block | undefined {
+  for (const b of l.blocks) if (offset >= b.offset && offset < b.offset + b.length) return b;
+  return undefined;
+}
 
 const NAME_REPLACEMENTS: Readonly<Record<string, string>> = {
   ä: 'ae',
@@ -48,18 +63,28 @@ export function patchNameFrom(text: string): string {
 
 /** The patch block that contains this offset (linear, from the patch base). */
 export function patchBlockAt(offset: Address): Block | undefined {
-  for (const b of PATCH_BLOCKS) if (offset >= b.offset && offset < b.offset + b.length) return b;
-  return undefined;
+  return blockAt(PATCH_LAYOUT, offset);
+}
+
+/** The SYSTEM block that contains this offset (linear, from the SYSTEM base). */
+export function systemBlockAt(offset: Address): Block | undefined {
+  return blockAt(SYSTEM_LAYOUT, offset);
 }
 
 /**
  * Raw bytes of one patch, by block offset (linear, from the patch base). Immutable: `with` returns a copy.
- * Blocks may be missing (not read yet); reading from them gives undefined.
+ * Blocks may be missing (not read yet); reading from them gives undefined. The same class holds SYSTEM with
+ * its own block table (`PatchImage.system`, Phase 3).
  */
 export class PatchImage {
-  private constructor(private readonly blocks: ReadonlyMap<Address, readonly number[]>) {}
+  private constructor(
+    private readonly blocks: ReadonlyMap<Address, readonly number[]>,
+    private readonly layout: Layout = PATCH_LAYOUT,
+  ) {}
 
   static readonly EMPTY = new PatchImage(new Map());
+  /** SYSTEM, nothing read yet. */
+  static readonly EMPTY_SYSTEM = new PatchImage(new Map(), SYSTEM_LAYOUT);
 
   /** From blocks already keyed by their offset from the patch base. */
   static of(blocks: ReadonlyMap<Address, readonly number[]>): PatchImage {
@@ -70,13 +95,22 @@ export class PatchImage {
    * From the DT1 of a range read (absolute addresses, as in ReadReply.blocks) of a patch at `base`. Messages
    * that are no known patch block or have the wrong length are left out.
    */
-  static fromReply(blocks: ReadonlyMap<Address, readonly number[]>, base: Address): PatchImage {
+  static fromReply(
+    blocks: ReadonlyMap<Address, readonly number[]>,
+    base: Address,
+    l: Layout = PATCH_LAYOUT,
+  ): PatchImage {
     const out = new Map<Address, readonly number[]>();
     for (const [a, data] of blocks) {
-      const b = BY_OFFSET.get(a - base);
+      const b = l.byOffset.get(a - base);
       if (b && data.length === b.length) out.set(b.offset, [...data]);
     }
-    return new PatchImage(out);
+    return new PatchImage(out, l);
+  }
+
+  /** SYSTEM from the DT1 of a range read at `base` (ADDR.system), or from blocks keyed by offset (base 0). */
+  static system(blocks: ReadonlyMap<Address, readonly number[]>, base: Address = 0): PatchImage {
+    return PatchImage.fromReply(blocks, base, SYSTEM_LAYOUT);
   }
 
   /** Number of blocks present (80 = complete). */
@@ -85,7 +119,7 @@ export class PatchImage {
   }
 
   get complete(): boolean {
-    return this.blocks.size === PATCH_BLOCKS.length;
+    return this.blocks.size === this.layout.blocks.length;
   }
 
   block(offset: Address): readonly number[] | undefined {
@@ -94,7 +128,7 @@ export class PatchImage {
 
   /** `length` bytes from `offset`, within one block; undefined if that block is missing. */
   read(offset: Address, length: number): readonly number[] | undefined {
-    const b = patchBlockAt(offset);
+    const b = blockAt(this.layout, offset);
     if (!b || offset + length > b.offset + b.length) return undefined;
     const data = this.blocks.get(b.offset);
     return data?.slice(offset - b.offset, offset - b.offset + length);
@@ -105,7 +139,7 @@ export class PatchImage {
    * fall outside the block, or into a block not read yet, are ignored.
    */
   with(offset: Address, data: readonly number[]): PatchImage {
-    const b = patchBlockAt(offset);
+    const b = blockAt(this.layout, offset);
     const old = b ? this.blocks.get(b.offset) : undefined;
     if (!b || !old) return this;
     const start = offset - b.offset;
@@ -113,7 +147,7 @@ export class PatchImage {
     for (let i = 0; i < data.length && start + i < b.length; i++) next[start + i] = data[i] ?? 0;
     const blocks = new Map(this.blocks);
     blocks.set(b.offset, next);
-    return new PatchImage(blocks);
+    return new PatchImage(blocks, this.layout);
   }
 
   /** Offsets of every byte that differs from `other` (missing blocks are not compared). */
