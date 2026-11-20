@@ -44,6 +44,13 @@ jobs:
             exit 1
           fi
 
+      # Fails early when CHANGELOG.md has no section for this version.
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          RUN: ${{ github.run_number }}
+        run: node tools/release-notes.mjs "$VERSION" "$RUN" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Type check, lint, tests, build
         run: npm run verify
 
@@ -111,10 +118,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           FILE: ${{ steps.apk.outputs.file }}
-          RUN: ${{ github.run_number }}
         run: |
-          # --generate-notes appends the pull requests merged since the previous tag to the text below.
           gh release create "$TAG" "$FILE" \
             --title "Katana Studio $TAG" \
-            --generate-notes \
-            --notes "Signed APK (versionCode $RUN). Install it on the phone by hand. Unofficial hobby project, not affiliated with BOSS/Roland."
+            --notes-file "$RUNNER_TEMP/release-notes.md"
