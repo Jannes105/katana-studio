@@ -1,6 +1,6 @@
 # Test plan: Phase 3a (explanations)
 
-Work through this on the phone with the signed release APK of Phase 3a (`katana-studio-0.7.0.apk`), connected to
+Work through this on the phone with the signed release APK of Phase 3a (`katana-studio-0.7.0.apk` or 0.7.1), connected to
 the amp. Phase 3a adds **explanations**: a long press (hold about half a second without moving) on a knob, a
 choice, a switch, an amp type, an effect type, a chain block or a row in the Control tab opens a window from below
 with what it does, when you need it, a typical start value and sometimes a sound tip. Nothing else on the screen

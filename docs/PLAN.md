@@ -1,7 +1,12 @@
 # Katana Studio – Projektplan
 
 *Katana Studio: eigener Editor für den BOSS Katana 100 Gen 3 per USB-Kabel, als Android-App.*
-Stand: 15.11.2026, nach mehreren Prüfrunden und ersten Messungen am Amp überarbeitet · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
+Stand: 20.11.2026 (zuerst 15.11.2026, seitdem mit jeder Phase nachgezogen) · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
+
+> **Aktueller Stand (20.11.2026):** Phasen 0 bis 3a sind gebaut und veröffentlicht, neueste Version
+> [v0.7.1](https://github.com/Jannes105/katana-studio/releases/tag/v0.7.1) (Regler-Icon und Startbildschirm).
+> Offen sind die Testpläne am Amp bzw. Handy für Phase 2, 3 und 3a (`docs/testplan/`) und die Handy-Reste aus 9.2 C.
+> Phase 4 ist pausiert; was als Nächstes kommt, ist noch nicht entschieden. Einzelheiten je Phase in Abschnitt 5.
 
 ---
 
@@ -413,13 +418,14 @@ katana-studio/
     state/          Spiegel des Amps, Abläufe
     storage/        Patch-/Backup-Format, Export/Import
     mock/           Mock-Amp, Mitschnitt
-    ui/             Svelte-Oberfläche
+    ui/             Svelte-Oberfläche, help/ mit den Erklärungen (Phase 3a)
   android/          von Capacitor erzeugtes Android-Projekt mit dem USB-Plugin (Kotlin)
   tests/            Unit-Tests, fixtures/
   testpages/        Machbarkeitstests (WebUSB), per GitHub Pages erreichbar
   prototype/        katana-test.html, serve.js (Referenz)
   docs/             PLAN.md, HANDOFF.md, protocol-notes.md, testplan/
-  tools/            nur lokal (extract-bts.js, in .gitignore)
+  tools/            katana-probe.ps1 (Versuche am PC), param-list.ts, setup-android-sdk.ps1;
+                    extract-bts.js nur lokal (in .gitignore)
 ```
 
 ## 5. Roadmap
@@ -1030,7 +1036,11 @@ System-Bereiche, System-Auswahlen und -Regler, Global-EQ-Schalter und -Speicher)
 einen Block erklärt ihn; der Block wird weder verschoben noch ausgewählt). **Abdeckungstest:** jeder angezeigte
 Parameter (über 1000 inklusive Assigns und SYSTEM), jeder Block, jeder Pedal-Eingang und jeder System-Bereich hat
 einen Text in beiden Sprachen; welche Parameter nur über einen allgemeinen Text abgedeckt sind, wurde einmal
-durchgesehen. Testplan `docs/testplan/phase-3a.md`, Version 0.7.0.
+durchgesehen. Testplan `docs/testplan/phase-3a.md`, Version 0.7.0. Gemergt als #34, **Release v0.7.0 am
+17.11.2026**. Der Testplan `docs/testplan/phase-3a.md` am Handy steht noch aus.
+
+*Nachtrag (18.11.2026):* eigenes Launcher-Icon (Regler, mit einfarbiger Variante für Android-Themen) und
+Startbildschirm statt der Capacitor-Vorgaben (#35), Version 0.7.1 (#36), **Release v0.7.1 am 18.11.2026**.
 
 ### Phase 4 – Bibliothek und Austausch
 *Pausiert (17.11.2026):* Bibliothek, Komplett-Wiederherstellen und .tsl-Import macht der Besitzer eher am PC (dort
