@@ -40,4 +40,4 @@ Needs Node 24; the Android build also needs JDK 21 and the Android command-line 
 
 ---
 
-Unofficial hobby project, not affiliated with BOSS/Roland. BOSS and Katana are trademarks of Roland Corporation.
+[MIT License](LICENSE). Unofficial hobby project, not affiliated with BOSS/Roland. BOSS and Katana are trademarks of Roland Corporation.

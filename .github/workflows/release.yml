@@ -113,6 +113,8 @@ jobs:
           FILE: ${{ steps.apk.outputs.file }}
           RUN: ${{ github.run_number }}
         run: |
+          # --generate-notes appends the pull requests merged since the previous tag to the text below.
           gh release create "$TAG" "$FILE" \
             --title "Katana Studio $TAG" \
+            --generate-notes \
             --notes "Signed APK (versionCode $RUN). Install it on the phone by hand. Unofficial hobby project, not affiliated with BOSS/Roland."
