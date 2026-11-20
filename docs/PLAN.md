@@ -1070,7 +1070,8 @@ Ende-zu-Ende-Tests der Oberfläche kommen später.
 die Probe. `versionCode` wird automatisch hochgezählt, sonst lehnt Android das Update ab. Die App zeigt ihre Version in den
 Einstellungen und im Protokoll-Export. Neue Versionen lädst du von der Release-Seite und installierst sie selbst.
 **Umgesetzt (0b):** Workflow „Release“ (`.github/workflows/release.yml`). Ablauf: Version in `package.json` erhöhen
-(per PR), nach dem Merge den passenden Tag `vX.Y.Z` auf `main` setzen. Der Workflow prüft, baut, signiert, prüft die
+und in `CHANGELOG.md` einen Abschnitt für die Version schreiben (per PR; aus Sicht der Nutzer, er wird der
+Release-Text, fehlt er, bricht der Workflow ab; seit 21.11.2026), nach dem Merge den passenden Tag `vX.Y.Z` auf `main` setzen. Der Workflow prüft, baut, signiert, prüft die
 Signatur und legt das Release mit `katana-studio-X.Y.Z.apk` an. Ein Tag, der nicht zur Version in `package.json` passt,
 bricht ab. `versionCode` = Laufnummer des Release-Workflows (steigt mit jedem Lauf), `versionName` = Version aus
 `package.json` (auch `src/app-info.ts` liest sie dort, es gibt nur eine Stelle). Von Hand gestartet
