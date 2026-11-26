@@ -89,6 +89,34 @@ button.primary {
   background: var(--line);
 }
 
+/* Tabs switch what is shown (areas, pages), never the amp: text with an accent line under the active one
+   (decided 2026-11-26, draft C). Values that change the amp are buttons with a frame instead, so the two
+   never look alike; a full accent fill stays for the one main action (save). */
+.utabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.utabs > button {
+  flex: 1 1 auto;
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.utabs > button.sel {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
 /* LED as on the amp panel. */
 .led {
   width: 7px;
