@@ -48,7 +48,7 @@ Test setup for everything marked [C]: Windows PC with the BOSS driver (Web MIDI 
 | 11–13 | `00 00 00` | not interpreted by us | [O] |
 
 The reply does **not** carry a firmware version (PLAN section 1). The older reading "firmware 06 00 00 00" in
-HANDOFF.md is superseded: the `06` is the model code. Where the firmware version lives is Q7.
+the first handoff notes (removed, still in the git history) is superseded: the `06` is the model code. Where the firmware version lives is Q7.
 
 ### 2.3 SysEx framing
 

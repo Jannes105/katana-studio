@@ -1,13 +1,13 @@
 # Katana Studio – Projektplan
 
 *Katana Studio: eigener Editor für den BOSS Katana 100 Gen 3 per USB-Kabel, als Android-App.*
-Stand: 26.11.2026 (zuerst 15.11.2026, seitdem mit jeder Phase nachgezogen) · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
+Stand: 26.11.2026 (zuerst 15.11.2026, seitdem mit jeder Phase nachgezogen) · Die Vorgeschichte (`HANDOFF.md`, bis 26.11.2026) steht nur noch in der Git-Historie.
 
 > **Aktueller Stand (26.11.2026):** Phasen 0 bis 3a sind gebaut und veröffentlicht, neueste Version
-> [v0.7.1](https://github.com/Jannes105/katana-studio/releases/tag/v0.7.1) (Regler-Icon und Startbildschirm).
-> Seitdem auf `main`, noch nicht veröffentlicht: Feinschliff nach einem UI/UX-Review (PRs #40–#43: Zurück-Taste,
-> Bildschirm bleibt bei Verbindung an, Reiter „Mehr“ statt „Log“, Reiter heißen Amp · Effekte · Kette · Setup · Mehr,
-> einheitliche Tabs und Werte, deutscher Disclaimer) und das Aufräumen alter Testwerkzeuge.
+> [v0.8.0](https://github.com/Jannes105/katana-studio/releases/tag/v0.8.0): Feinschliff nach einem UI/UX-Review
+> (Zurück-Taste, Bildschirm bleibt bei Verbindung an, Reiter „Mehr“ statt „Log“, Reiter heißen
+> Amp · Effekte · Kette · Setup · Mehr, einheitliche Tabs und Werte, deutscher Disclaimer) und Aufräumen alter
+> Testwerkzeuge.
 > Offen sind die Testpläne am Amp bzw. Handy für Phase 2, 3 und 3a (`docs/testplan/`) und die Handy-Reste aus 9.2 C.
 > Phase 4 ist wieder pausiert (26.11.2026): Patches verwaltest du am PC, Ziel ist jetzt der Feinschliff der
 > vorhandenen Funktionen. Einzelheiten je Phase in Abschnitt 5.
@@ -39,7 +39,7 @@ Gespielt wird auf den **Kanälen A1–B4**, Panel wird nicht genutzt.
 | Warum nicht … | *Reine Web-App:* Der PC-Vorteil fällt weg, eine App ist unabhängig von Chrome. *Expo Go:* kann keinen eigenen USB-Code ausführen. *Expo/React Native:* möglich, aber am PC schlechter testbar. *Komplett nativ:* jeder Schritt langsamer und nur am Handy testbar. |
 | Repo und Verteilung | **Öffentliches GitHub-Repo** (Konto `Jannes105`). APKs als **GitHub Releases**. GitHub Pages wird nicht mehr genutzt (die Testseiten sind seit 26.11.2026 entfernt). |
 | Rechtliches | Keine Roland-Dateien im Repo (auch nicht in Teilen), keine BOSS-Logos/-Grafiken, eigene Parameterliste. Hinweis in README und App: *„Inoffizielles Hobbyprojekt, nicht von BOSS/Roland. BOSS und Katana sind Marken der Roland Corporation.“* `.gitignore` schließt Auspack-Ordner und `tools/extract-bts.js` aus (das Werkzeug bleibt lokal). |
-| Sprache | **Englisch:** Code, Bezeichner, Kommentare, Commit-Nachrichten, README und `docs/protocol-notes.md` (so ist es üblich). **Deutsch:** nur `PLAN.md` und `HANDOFF.md` als Arbeitsdokumente. **Oberfläche der App:** Englisch als Grundsprache, Deutsch als zweite Sprache; die App folgt der Handy-Sprache und lässt sich in den Einstellungen umschalten. Parameternamen bleiben in beiden Sprachen **englisch wie am Amp** (Gain, Bass, Threshold …). Die Texte liegen gesammelt an einer Stelle, je Sprache eine Tabelle, von Anfang an. |
+| Sprache | **Englisch:** Code, Bezeichner, Kommentare, Commit-Nachrichten, README und `docs/protocol-notes.md` (so ist es üblich). **Deutsch:** nur `PLAN.md` als Arbeitsdokument. **Oberfläche der App:** Englisch als Grundsprache, Deutsch als zweite Sprache; die App folgt der Handy-Sprache und lässt sich in den Einstellungen umschalten. Parameternamen bleiben in beiden Sprachen **englisch wie am Amp** (Gain, Bass, Threshold …). Die Texte liegen gesammelt an einer Stelle, je Sprache eine Tabelle, von Anfang an. |
 | Arbeitsweise im Repo | **Branch und Pull Request**, kein direktes Arbeiten auf `main`. `main` ist geschützt: Die CI muss grün sein, kein Force-Push, Squash-Merge, gemergt wird von dir. (Entscheidung 16.11.2026) |
 | Test-App | `usbtest/` wird **gelöscht**, sobald die echte App den USB-Teil übernommen hat und in der Probe funktioniert. Bis dahin bleibt sie für Probe und Fehlersuche. Das Kotlin-Plugin wandert in die echte App. (Entscheidung 16.11.2026) *Erledigt 26.11.2026:* `usbtest/`, `testpages/` und `prototype/` sind gelöscht (in der Git-Historie erhalten). |
 | Versionen | **Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21.** Alles Weitere (Gradle, Android-Gradle-Plugin, Node) wird nicht eigens festgeschrieben. (Entscheidung 16.11.2026) |
@@ -425,7 +425,7 @@ katana-studio/
     ui/             Svelte-Oberfläche, help/ mit den Erklärungen (Phase 3a)
   android/          von Capacitor erzeugtes Android-Projekt mit dem USB-Plugin (Kotlin)
   tests/            Unit-Tests, fixtures/
-  docs/             PLAN.md, HANDOFF.md, protocol-notes.md, testplan/
+  docs/             PLAN.md, protocol-notes.md, testplan/, screenshot.jpg
   tools/            katana-probe.ps1 (Versuche am PC), param-list.ts, setup-android-sdk.ps1;
                     extract-bts.js nur lokal (in .gitignore)
 ```
@@ -1044,9 +1044,16 @@ durchgesehen. Testplan `docs/testplan/phase-3a.md`, Version 0.7.0. Gemergt als #
 *Nachtrag (18.11.2026):* eigenes Launcher-Icon (Regler, mit einfarbiger Variante für Android-Themen) und
 Startbildschirm statt der Capacitor-Vorgaben (#35), Version 0.7.1 (#36), **Release v0.7.1 am 18.11.2026**.
 
+*Nachtrag (26.11.2026):* Feinschliff nach einem UI/UX-Review: Zurück-Taste schließt Ebenen, Bildschirm bleibt bei
+Verbindung an, Undo-Hinweis verdeckt nichts mehr (#40); Reiter „Mehr“ statt „Log“, Reiter heißen
+Amp · Effekte · Kette · Setup · Mehr (#41); einheitliche Tabs (Unterstrich) und Werte (Rahmen) (#42); deutscher
+Disclaimer (#43). Alte Testwerkzeuge aus Phase 0 und `HANDOFF.md` entfernt (#44 und der Release-PR), neuer
+README-Screenshot. Version 0.8.0, **Release v0.8.0 am 26.11.2026**.
+
 ### Phase 4 – Bibliothek und Austausch
 *Pausiert (17.11.2026):* Bibliothek, Komplett-Wiederherstellen und .tsl-Import macht der Besitzer eher am PC (dort
-gibt es BTS). Wird wieder aufgenommen, wenn es am Handy gebraucht wird.
+gibt es BTS). Wird wieder aufgenommen, wenn es am Handy gebraucht wird. Am 23.11.2026 kurz wieder aufgenommen
+(Backup-Umbau geplant), am 26.11.2026 erneut zurückgestellt, ohne dass etwas gebaut wurde.
 - Patch-Bibliothek auf dem Gerät (Dateien in einem sichtbaren Ordner, siehe 4.6), Ordner/Suche.
 - **Komplett-Wiederherstellen** aus einem Backup (automatisches Backup davor, Zurücklesen danach).
 - **.tsl-Import/-Export** für Gen-3-Dateien (Tone Exchange). Dateien vom Katana MkII bleiben außen vor.
