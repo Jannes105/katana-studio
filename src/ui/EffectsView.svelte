@@ -28,6 +28,7 @@
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
+  import { onBack } from './back';
   import { paramHelp, typeKey, type HelpTarget } from './help/help';
   import { longPress } from './help/press';
   import { openHelp } from './help/state.svelte';
@@ -66,6 +67,10 @@
   /** Page of the effect page (direction A) and the tab of the delay page. */
   let page = $state(0);
   let delayTab = $state<'delay' | 'delay2'>('delay');
+  // The back button leads from an effect or section page back to the list.
+  $effect(() => {
+    if (open !== null) return onBack(() => (open = null));
+  });
   const HARMONIST = 12;
 
   const COLOUR_CSS = ['var(--c-green)', 'var(--c-red)', 'var(--c-yellow)'] as const;

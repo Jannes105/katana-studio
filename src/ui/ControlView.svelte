@@ -23,6 +23,7 @@
   import type { AmpConnection, ConnectionState, WriteResult } from '../state/connection';
   import Knob from './Knob.svelte';
   import Sheet from './Sheet.svelte';
+  import { onBack } from './back';
   import { paramHelp } from './help/help';
   import { longPress } from './help/press';
   import { openHelp } from './help/state.svelte';
@@ -55,6 +56,13 @@
   let choosing = $state<{ def: ParamDef; title: string; system?: boolean } | null>(null);
   let section = $state<SystemSection | null>(null);
   let sysPage = $state(0);
+  // The back button leads from a pedal or SYSTEM page back to the areas.
+  $effect(() => {
+    if (input !== null) return onBack(() => (input = null));
+  });
+  $effect(() => {
+    if (section !== null) return onBack(() => (section = null));
+  });
 
   // ---- SYSTEM (read once after connecting; no stored slot, so nothing is "unsaved") ----
   const sysValue = (key: string): number | undefined => readRaw(s.system, systemParam(key));
@@ -480,14 +488,25 @@
     margin: 0;
     font-size: 18px;
   }
+  /* Back as on the effect pages: no button look, an accent arrow. */
   .back {
-    min-height: 40px;
+    min-height: 44px;
     min-width: 44px;
     padding: 0;
+    margin-left: -8px;
     display: grid;
     place-items: center;
+    background: none;
   }
-  .back svg,
+  .back svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
   .chev {
     width: 18px;
     height: 18px;

@@ -14,6 +14,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import android.view.WindowManager
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.getcapacitor.JSArray
@@ -385,6 +386,7 @@ class KatanaUsbPlugin : Plugin() {
             thread.start()
         }
         log("Open")
+        keepScreenOn(true)
         call.resolve(info)
     }
 
@@ -402,6 +404,7 @@ class KatanaUsbPlugin : Plugin() {
             state
         }
         val c = conn ?: return
+        keepScreenOn(false)
         log("Closing ($reason)")
         try {
             if (thread != null && thread !== Thread.currentThread()) thread.join(500)
@@ -419,6 +422,18 @@ class KatanaUsbPlugin : Plugin() {
             log("close failed: $e")
         }
         log("Closed")
+    }
+
+    /**
+     * Keeps the screen on while the amp is open, so it does not go dark while you play between two changes. The
+     * flag only acts while the app's window is visible, so in the background the phone sleeps as usual.
+     */
+    private fun keepScreenOn(on: Boolean) {
+        val act = activity ?: return
+        act.runOnUiThread {
+            if (on) act.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else act.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun readLoop(conn: UsbDeviceConnection, ep: UsbEndpoint) {
