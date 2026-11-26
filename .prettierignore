@@ -1,8 +1,5 @@
 # Prettier formats only the app (src, tests) and its config files.
 docs/
-testpages/
-usbtest/
-prototype/
 tools/
 captures/
 bts-extract/

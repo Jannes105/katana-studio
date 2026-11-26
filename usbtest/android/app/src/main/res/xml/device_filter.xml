@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- BOSS Katana Gen 3: VID 0x0582 = 1410, PID 0x02F0 = 752 (the filter wants decimal numbers) -->
-<resources>
-    <usb-device vendor-id="1410" product-id="752" />
-</resources>

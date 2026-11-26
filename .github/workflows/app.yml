@@ -1,7 +1,7 @@
 name: App
 
 # Type check, lint, tests and web build of the app, then a debug APK.
-# The "app" job is meant to become a required check for main (PLAN 9.2 D 18).
+# The "app" job is the required check for main (PLAN 9.2 D 18).
 # No path filters on purpose: a required check that is skipped would block the pull request.
 on:
   push:
