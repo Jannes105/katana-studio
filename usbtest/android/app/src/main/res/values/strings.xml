@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Katana USB Test</string>
-    <string name="title_activity_main">Katana USB Test</string>
-    <string name="package_name">io.github.jannes105.katanastudio.usbtest</string>
-    <string name="custom_url_scheme">io.github.jannes105.katanastudio.usbtest</string>
-</resources>

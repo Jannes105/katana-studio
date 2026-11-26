@@ -1,12 +1,16 @@
 # Katana Studio – Projektplan
 
 *Katana Studio: eigener Editor für den BOSS Katana 100 Gen 3 per USB-Kabel, als Android-App.*
-Stand: 20.11.2026 (zuerst 15.11.2026, seitdem mit jeder Phase nachgezogen) · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
+Stand: 26.11.2026 (zuerst 15.11.2026, seitdem mit jeder Phase nachgezogen) · Vorgeschichte: `HANDOFF.md` (teilweise überholt, dieser Plan gilt)
 
-> **Aktueller Stand (20.11.2026):** Phasen 0 bis 3a sind gebaut und veröffentlicht, neueste Version
+> **Aktueller Stand (26.11.2026):** Phasen 0 bis 3a sind gebaut und veröffentlicht, neueste Version
 > [v0.7.1](https://github.com/Jannes105/katana-studio/releases/tag/v0.7.1) (Regler-Icon und Startbildschirm).
+> Seitdem auf `main`, noch nicht veröffentlicht: Feinschliff nach einem UI/UX-Review (PRs #40–#43: Zurück-Taste,
+> Bildschirm bleibt bei Verbindung an, Reiter „Mehr“ statt „Log“, Reiter heißen Amp · Effekte · Kette · Setup · Mehr,
+> einheitliche Tabs und Werte, deutscher Disclaimer) und das Aufräumen alter Testwerkzeuge.
 > Offen sind die Testpläne am Amp bzw. Handy für Phase 2, 3 und 3a (`docs/testplan/`) und die Handy-Reste aus 9.2 C.
-> Phase 4 ist pausiert; was als Nächstes kommt, ist noch nicht entschieden. Einzelheiten je Phase in Abschnitt 5.
+> Phase 4 ist wieder pausiert (26.11.2026): Patches verwaltest du am PC, Ziel ist jetzt der Feinschliff der
+> vorhandenen Funktionen. Einzelheiten je Phase in Abschnitt 5.
 
 ---
 
@@ -33,11 +37,11 @@ Gespielt wird auf den **Kanälen A1–B4**, Panel wird nicht genutzt.
 | Name | **Katana Studio**, Untertitel „für BOSS Katana Gen 3“. „BOSS“ steht **nicht** im Titel (zu nah an „BOSS Tone Studio“). Name und Untertitel stehen im Code an **einer** Stelle (`src/app-info.ts`). Die **App-ID** `io.github.jannes105.katanastudio` steht ab der ersten Installation fest. |
 | Plattform | **Android-App (APK)**, gebaut mit **Capacitor**: Oberfläche mit Webtechnik, USB-Verbindung als kleines **natives Plugin (Kotlin)**. Läuft offline. Öffnet sich beim Einstecken des Kabels von selbst. |
 | Warum nicht … | *Reine Web-App:* Der PC-Vorteil fällt weg, eine App ist unabhängig von Chrome. *Expo Go:* kann keinen eigenen USB-Code ausführen. *Expo/React Native:* möglich, aber am PC schlechter testbar. *Komplett nativ:* jeder Schritt langsamer und nur am Handy testbar. |
-| Repo und Verteilung | **Öffentliches GitHub-Repo** (Konto `Jannes105`). APKs als **GitHub Releases**. GitHub Pages nur für Testseiten. |
+| Repo und Verteilung | **Öffentliches GitHub-Repo** (Konto `Jannes105`). APKs als **GitHub Releases**. GitHub Pages wird nicht mehr genutzt (die Testseiten sind seit 26.11.2026 entfernt). |
 | Rechtliches | Keine Roland-Dateien im Repo (auch nicht in Teilen), keine BOSS-Logos/-Grafiken, eigene Parameterliste. Hinweis in README und App: *„Inoffizielles Hobbyprojekt, nicht von BOSS/Roland. BOSS und Katana sind Marken der Roland Corporation.“* `.gitignore` schließt Auspack-Ordner und `tools/extract-bts.js` aus (das Werkzeug bleibt lokal). |
 | Sprache | **Englisch:** Code, Bezeichner, Kommentare, Commit-Nachrichten, README und `docs/protocol-notes.md` (so ist es üblich). **Deutsch:** nur `PLAN.md` und `HANDOFF.md` als Arbeitsdokumente. **Oberfläche der App:** Englisch als Grundsprache, Deutsch als zweite Sprache; die App folgt der Handy-Sprache und lässt sich in den Einstellungen umschalten. Parameternamen bleiben in beiden Sprachen **englisch wie am Amp** (Gain, Bass, Threshold …). Die Texte liegen gesammelt an einer Stelle, je Sprache eine Tabelle, von Anfang an. |
 | Arbeitsweise im Repo | **Branch und Pull Request**, kein direktes Arbeiten auf `main`. `main` ist geschützt: Die CI muss grün sein, kein Force-Push, Squash-Merge, gemergt wird von dir. (Entscheidung 16.11.2026) |
-| Test-App | `usbtest/` wird **gelöscht**, sobald die echte App den USB-Teil übernommen hat und in der Probe funktioniert. Bis dahin bleibt sie für Probe und Fehlersuche. Das Kotlin-Plugin wandert in die echte App. (Entscheidung 16.11.2026) |
+| Test-App | `usbtest/` wird **gelöscht**, sobald die echte App den USB-Teil übernommen hat und in der Probe funktioniert. Bis dahin bleibt sie für Probe und Fehlersuche. Das Kotlin-Plugin wandert in die echte App. (Entscheidung 16.11.2026) *Erledigt 26.11.2026:* `usbtest/`, `testpages/` und `prototype/` sind gelöscht (in der Git-Historie erhalten). |
 | Versionen | **Capacitor 8, `minSdk 29`, `targetSdk 36`, Kotlin 2.2.20, JDK 21.** Alles Weitere (Gradle, Android-Gradle-Plugin, Node) wird nicht eigens festgeschrieben. (Entscheidung 16.11.2026) |
 | Datenhaltung | Der **Amp ist die Wahrheit** für den aktuellen Klang. Was nur in der App existiert (Backups, später Bibliothek, Setlisten), lässt sich jederzeit als Datei exportieren. |
 | Kanalwechsel mit Ungespeichertem | **Einfach wechseln**, wie am Amp: ohne Rückfrage, nichts blockiert. Die App **merkt sich aber die ungespeicherten Änderungen** des verlassenen Kanals und bietet sie dort als Leiste an („Änderungen von A2 zurückholen“). Am Amp sind sie weg, in der App nicht: sonst löscht ein Fehltipp das Feintuning, und das gilt laut Abschnitt 1 als gescheitert. |
@@ -95,7 +99,7 @@ Gemeinsame Schnittstelle `Transport` (`send`, `onMessage`, Verbindungsstatus). U
 - **Web MIDI**: für die Entwicklung am PC (über den Boss-Treiber, Port „KATANA3“).
 - **Mock-Amp**: für Entwicklung und Tests ohne Amp.
 - ~~WebUSB~~: entfällt. Im Handy-Chrome scheitert `claimInterface` am vom Kernel belegten Interface (gemessen in 0a,
-  siehe 4.2a). Die Testseite `testpages/usb/` bleibt nur als Deskriptor-Anzeige.
+  siehe 4.2a). Die Testseite `testpages/usb/` diente danach noch als Deskriptor-Anzeige (entfernt 26.11.2026).
 
 **Gemessene USB-Werte** (Phase 0a, Nothing Phone (3a) Pro, Einzelheiten in `protocol-notes.md` Abschnitt 3):
 **Interface 3** (Klasse `FF/03/00`, Roland-Deskriptor `06 24 F1 02 …`), **Altsetting 0**, **Bulk OUT `0x03`** und
@@ -421,8 +425,6 @@ katana-studio/
     ui/             Svelte-Oberfläche, help/ mit den Erklärungen (Phase 3a)
   android/          von Capacitor erzeugtes Android-Projekt mit dem USB-Plugin (Kotlin)
   tests/            Unit-Tests, fixtures/
-  testpages/        Machbarkeitstests (WebUSB), per GitHub Pages erreichbar
-  prototype/        katana-test.html, serve.js (Referenz)
   docs/             PLAN.md, HANDOFF.md, protocol-notes.md, testplan/
   tools/            katana-probe.ps1 (Versuche am PC), param-list.ts, setup-android-sdk.ps1;
                     extract-bts.js nur lokal (in .gitignore)
@@ -1136,7 +1138,7 @@ Ausgabeformat von `apksigner` (build-tools 37); behoben in #9, der Tag wurde vor
 
 Noch offen, aber nicht Teil von 0b: 9.2 C (Akku, OTG über 15 Minuten, Brummen, Benachrichtigungstöne), ~~9.2 D 20~~
 (Testdaten, erledigt in 1a), 9.2 E 23 (Schema der Parameterliste, vor 1b),
-große DT1 ohne Abstand messen (vor 1c), `usbtest/` löschen, sobald die echte App in der Probe funktioniert.
+große DT1 ohne Abstand messen (vor 1c), `usbtest/` löschen, sobald die echte App in der Probe funktioniert (erledigt 26.11.2026).
 
 ---
 
@@ -1212,7 +1214,8 @@ Ort der Firmware-Version (bisher nicht gefunden, kein Hindernis).
     (siehe Abschnitt 2). Eingerichtet 16.11.2026: Die Workflows laufen auch bei Pull Requests; Pflicht-Prüfung ist
     der Job `test` (Tests der Testseiten), der Test-APK-Build läuft nur bei Änderungen an `usbtest/` und ist keine
     Pflicht. Seit 16.11.2026 ist zusätzlich der Job `app` (Workflow „App“: Typprüfung, Lint, Tests, Build,
-    Debug-APK der echten App) Pflicht-Prüfung.
+    Debug-APK der echten App) Pflicht-Prüfung. Seit 26.11.2026 ist `app` die einzige Pflicht-Prüfung (Testseiten
+    und Test-APK entfernt).
 19. ~~**CI aufräumen**~~ *weitgehend erledigt 16.11.2026:* checkout, setup-node, setup-java, setup-gradle und
     upload-artifact laufen überall auf v5 (Node 24). Offen sind nur die Pages-Actions (`configure-pages`,
     `upload-pages-artifact`, `deploy-pages`) in `pages.yml`, sobald es dafür Node-24-Versionen gibt.

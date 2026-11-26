@@ -45,16 +45,7 @@ const layerRules = Object.entries(FORBIDDEN).map(([layer, banned]) => ({
 
 export default ts.config(
   {
-    ignores: [
-      'dist/',
-      'android/',
-      'usbtest/',
-      'testpages/',
-      'prototype/',
-      'tools/',
-      'captures/',
-      'bts-extract/',
-    ],
+    ignores: ['dist/', 'android/', 'tools/', 'captures/', 'bts-extract/'],
   },
   js.configs.recommended,
   ...ts.configs.strict,
