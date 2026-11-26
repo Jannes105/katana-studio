@@ -426,7 +426,7 @@
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
             </button>
-            <div class="tabs" role="tablist" aria-label={t(lang, 'fx.pages')}>
+            <div class="tabs utabs" role="tablist" aria-label={t(lang, 'fx.pages')}>
               {#each l.pages as p, i (pageTitle(p, many))}
                 <button
                   role="tab"
@@ -512,7 +512,7 @@
     <div class="fx" class:withtabs={r.key === 'delay'} style:--c={colourCss(r.colour)}>
       {@render back(r.label, r.on, r.group.switch)}
       {#if r.key === 'delay'}
-        <div class="seg dtabs" role="tablist" aria-label={r.label}>
+        <div class="utabs dtabs" role="tablist" aria-label={r.label}>
           <button
             role="tab"
             aria-selected={delayTab === 'delay'}
@@ -1042,25 +1042,9 @@
     align-items: center;
     margin: 6px -8px 2px;
   }
-  .tabs {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tabs button {
-    min-height: 34px;
-    padding: 4px 12px;
-    font-size: 13px;
-    white-space: nowrap;
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 17px;
-  }
-  .tabs button.sel {
-    color: var(--accent);
-    border-color: var(--accent);
+  /* Page tabs between the arrows: the shared underline tabs (theme.css), each as wide as its title. */
+  .tabs > button {
+    flex: 0 0 auto;
   }
   .fxpage {
     touch-action: pan-y;
@@ -1093,9 +1077,6 @@
   }
   .dtabs {
     margin: 4px 0 8px;
-  }
-  .dtabs button {
-    flex: 1;
   }
   /* One row: label on the left, options on the right (fits the page height, Phase 2). */
   .choice {

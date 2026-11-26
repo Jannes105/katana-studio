@@ -308,7 +308,7 @@
   </div>
   {#if current}
     {#if l.pages.length > 1}
-      <div class="pages" role="tablist">
+      <div class="utabs" role="tablist">
         {#each l.pages as p, i (p.title)}
           <button
             role="tab"
@@ -360,7 +360,7 @@
       <p class="note">{t(lang, 'ctl.noTarget')}</p>
     {/if}
   {:else}
-    <div class="areas" role="tablist" aria-label={t(lang, 'ctl.sections')}>
+    <div class="utabs" role="tablist" aria-label={t(lang, 'ctl.sections')}>
       {#each AREAS as [key, label] (key)}
         <button role="tab" aria-selected={area === key} class:sel={area === key} onclick={() => (area = key)}>
           {t(lang, label)}
@@ -461,23 +461,6 @@
     flex-direction: column;
     gap: 6px;
     padding: 8px 12px;
-  }
-  .areas {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-  }
-  .areas button {
-    min-height: 40px;
-    min-width: 0;
-    padding: 4px 2px;
-    font-size: 14px;
-    border-radius: 10px;
-    background: var(--panel-2);
-  }
-  .areas button.sel {
-    background: var(--accent);
-    color: var(--on-accent);
   }
   .head {
     display: flex;
@@ -608,15 +591,15 @@
     color: var(--warn);
     font-size: 13px;
   }
-  .seg,
-  .pages {
+  /* Values (they change the amp): grey buttons, the chosen one framed, as on the effect pages. Areas and
+     pages are the shared underline tabs (theme.css). */
+  .seg {
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
     gap: 4px;
   }
-  .seg button,
-  .pages button {
+  .seg button {
     min-height: 40px;
     min-width: 0;
     padding: 4px 2px;
@@ -624,10 +607,8 @@
     background: var(--panel-2);
     font-size: 14px;
   }
-  .seg button.sel,
-  .pages button.sel {
-    background: var(--accent);
-    color: var(--on-accent);
+  .seg button.sel {
+    border-color: var(--accent);
   }
   .pick.toggle {
     grid-template-columns: 1fr auto;
@@ -650,7 +631,8 @@
     overflow-y: auto;
   }
   .list button.sel {
-    background: var(--accent);
-    color: var(--on-accent);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
   }
 </style>
