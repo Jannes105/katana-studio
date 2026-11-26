@@ -165,6 +165,10 @@ const en = {
   'tab.ctl': 'Setup',
   'tab.files': 'More',
 
+  'app.subtitle': 'for BOSS Katana Gen 3',
+  'app.disclaimer':
+    'Unofficial hobby project, not affiliated with BOSS/Roland. BOSS and Katana are trademarks of Roland Corporation.',
+
   'files.patch': 'This patch',
   'files.channels': 'All channels',
   'files.settings': 'Settings',
@@ -380,6 +384,10 @@ const de: Record<TextKey, string> = {
   'tab.chain': 'Kette',
   'tab.ctl': 'Setup',
   'tab.files': 'Mehr',
+
+  'app.subtitle': 'für BOSS Katana Gen 3',
+  'app.disclaimer':
+    'Inoffizielles Hobbyprojekt, nicht mit BOSS/Roland verbunden. BOSS und Katana sind Marken der Roland Corporation.',
 
   'files.patch': 'Dieser Patch',
   'files.channels': 'Alle Kanäle',

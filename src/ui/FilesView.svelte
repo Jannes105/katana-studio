@@ -3,7 +3,7 @@
   // .tsl, then the settings (language, log, info). Before, all of this sat in the connection window behind
   // "● USB", which now only shows the connection. The actions themselves live in App (the save confirmation
   // and the load window use them too); this view lays them out.
-  import { APP_NAME, APP_SUBTITLE, APP_VERSION, DISCLAIMER } from '../app-info';
+  import { APP_NAME, APP_VERSION } from '../app-info';
   import type { ConnectionState } from '../state/connection';
   import LogView from './LogView.svelte';
   import { onBack } from './back';
@@ -138,7 +138,7 @@
       </li>
     </ul>
 
-    <p class="info">{APP_NAME} v{APP_VERSION}<br />{APP_SUBTITLE} · {DISCLAIMER}</p>
+    <p class="info">{APP_NAME} v{APP_VERSION}<br />{t(lang, 'app.subtitle')} · {t(lang, 'app.disclaimer')}</p>
   {/if}
 </div>
 
