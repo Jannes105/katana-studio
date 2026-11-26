@@ -3,18 +3,18 @@
   // states, the tabs Rehearsal / Effects / Chain / Control / Log, and the connection window behind the dot in the header.
   import { onMount } from 'svelte';
   import { fromStore } from 'svelte/store';
-  import { APP_NAME, APP_SUBTITLE, APP_VERSION, DISCLAIMER } from '../app-info';
+  import { APP_NAME, APP_VERSION } from '../app-info';
   import { ADDR, PATCH_SLOT_NAMES } from '../protocol/address';
   import { AMP_KNOBS } from '../model/params';
   import Header from './Header.svelte';
-  import LogView from './LogView.svelte';
+  import FilesView from './FilesView.svelte';
   import ControlView from './ControlView.svelte';
   import EffectsView from './EffectsView.svelte';
   import ProbeView from './ProbeView.svelte';
   import Sheet from './Sheet.svelte';
   import HelpSheet from './help/HelpSheet.svelte';
   import { closeHelp, helpState } from './help/state.svelte';
-  import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
+  import { pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
   import { installBack } from './back';
   import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
@@ -24,7 +24,7 @@
   import type { LoadResult } from '../state/connection';
   import { readPatchSource, type PatchSource } from '../storage/sources';
 
-  type Page = 'probe' | 'fx' | 'chain' | 'ctl' | 'log';
+  type Page = 'probe' | 'fx' | 'chain' | 'ctl' | 'files';
 
   /** How long "Undo" stays offered after a reset, revert or restore (PLAN 4.5 rule 7). */
   const UNDO_MS = 6000;
@@ -35,14 +35,18 @@
   /** Local date (YYYY-MM-DD) of the last complete backup (PLAN 1c: offer a backup if there is none from today). */
   const BACKUP_KEY = 'katana-studio.lastBackup';
   const today = (): string => new Date().toLocaleDateString('sv');
-  function backupToday(): boolean {
+  function readLastBackup(): string | null {
     try {
-      return localStorage.getItem(BACKUP_KEY) === today();
+      return localStorage.getItem(BACKUP_KEY);
     } catch {
-      return false;
+      return null;
     }
   }
+  /** Shown in the files tab; also decides whether saving offers a backup first. */
+  let lastBackup = $state(readLastBackup());
+  const backupToday = (): boolean => lastBackup === today();
   function rememberBackup(): void {
+    lastBackup = today();
     try {
       localStorage.setItem(BACKUP_KEY, today());
     } catch {
@@ -66,6 +70,8 @@
   let lang = $state<Language>(initialLanguage());
   let page = $state<Page>('probe');
   let statusOpen = $state(false);
+  /** The log page in the files tab is open. */
+  let logOpen = $state(false);
   let channelsOpen = $state(false);
   /** The last reset/revert/restore, offered for undo for a moment. */
   let undoable = $state<{ text: string; result: WriteResult } | null>(null);
@@ -369,7 +375,7 @@
   {/if}
 
   <main>
-    {#if !shown && page !== 'log'}
+    {#if !shown && page !== 'files'}
       <div class="empty">
         {#if s.phase === 'error'}
           <p class="big error">{t(lang, 'status.error')}</p>
@@ -396,7 +402,20 @@
     {:else if page === 'ctl'}
       <ControlView {s} {lang} {connection} onUndoable={offerUndo} />
     {:else}
-      <div class="log"><LogView {app} {lang} /></div>
+      <FilesView
+        {s}
+        {lang}
+        {app}
+        bind:logOpen
+        {fileNote}
+        {lastBackup}
+        onBackup={() => void backupAll()}
+        onSavePatch={() => void savePatch()}
+        onTslPatch={() => void tslPatch()}
+        onTslChannels={() => void tslChannels()}
+        onLoad={chooseFile}
+        onLanguage={setLanguage}
+      />
     {/if}
   </main>
 
@@ -442,12 +461,16 @@
       </svg>
       {t(lang, 'tab.ctl')}
     </button>
-    <button class:on={page === 'log'} onclick={() => (page = 'log')}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9" /></svg>
-      {t(lang, 'tab.log')}
+    <button class:on={page === 'files'} onclick={() => (page = 'files')}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"
+        ><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg
+      >
+      {t(lang, 'tab.files')}
     </button>
   </nav>
 </div>
+
+<input class="hidden" type="file" bind:this={fileInput} onchange={(e) => void fileChosen(e)} />
 
 {#if helpState.target}
   <HelpSheet target={helpState.target} {lang} onClose={closeHelp} />
@@ -605,39 +628,10 @@
       class="wide flat"
       onclick={() => {
         statusOpen = false;
-        page = 'log';
+        page = 'files';
+        logOpen = true;
       }}>{t(lang, 'action.openLog')}</button
     >
-
-    <p class="label">{t(lang, 'backup.title')}</p>
-    <div class="pair">
-      <button disabled={s.phase !== 'connected' || s.reading || s.backingUp} onclick={() => void backupAll()}>
-        {s.backingUp ? t(lang, 'backup.running') : t(lang, 'backup.all')}
-      </button>
-      <button disabled={!shown} onclick={() => void savePatch()}>{t(lang, 'backup.patch')}</button>
-    </div>
-    <p class="sublabel">{t(lang, 'backup.hint')}</p>
-    <div class="pair">
-      <button disabled={!shown} onclick={() => void tslPatch()}>{t(lang, 'tsl.patch')}</button>
-      <button
-        disabled={s.phase !== 'connected' || s.reading || s.backingUp}
-        onclick={() => void tslChannels()}>{t(lang, 'tsl.channels')}</button
-      >
-    </div>
-    <p class="sublabel">{t(lang, 'tsl.hint')}</p>
-    <button class="wide" disabled={!canEdit(s)} onclick={chooseFile}>{t(lang, 'load.button')}</button>
-    <p class="sublabel">{t(lang, 'load.hint')}</p>
-    <input class="hidden" type="file" bind:this={fileInput} onchange={(e) => void fileChosen(e)} />
-    {#if fileNote}
-      <p class="detail" class:error={!fileNote.ok}>{fileNote.text}</p>
-    {/if}
-
-    <p class="label">{t(lang, 'fact.language')}</p>
-    <div class="pair">
-      {#each LANGUAGES as l (l)}
-        <button class:on={lang === l} onclick={() => setLanguage(l)}>{LANGUAGE_NAMES[l]}</button>
-      {/each}
-    </div>
 
     {#if app.mock}
       {@const mock = app.mock}
@@ -668,8 +662,6 @@
         {/each}
       </div>
     {/if}
-
-    <p class="disclaimer">{APP_SUBTITLE} · {DISCLAIMER}</p>
   </Sheet>
 {/if}
 
@@ -823,7 +815,6 @@
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
-  .pair button.on,
   .channels button.on {
     border: 2px solid var(--accent);
     color: var(--accent);

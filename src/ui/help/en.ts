@@ -848,7 +848,7 @@ const MORE = {
   'pedalFx.type': {
     short: 'Which pedal effect the expression pedal plays.',
     what: 'Pedal Wah, Pedal Bend (pitch) or the classic Wah 95E; the pedal moves it.',
-    when: 'Needs an expression pedal assigned to Pedal FX (Control tab).',
+    when: 'Needs an expression pedal assigned to Pedal FX (Setup tab).',
   },
   'pedalFx.position': {
     short: 'Where the pedal effect sits: before the amp or after it.',
@@ -881,7 +881,7 @@ const MORE = {
   'solo.on': {
     short: 'Switches the solo settings on.',
     what: 'Solo adds its own level and EQ on top of the patch, for lead lines.',
-    when: 'Put it on a footswitch (Control tab) and step on it for solos.',
+    when: 'Put it on a footswitch (Setup tab) and step on it for solos.',
   },
   'solo.level': {
     short: 'How much louder the sound gets with Solo on.',
@@ -961,7 +961,7 @@ const MORE = {
   'block.amp': {
     short: 'The amp itself: preamp, tone stack, power amp.',
     what: 'Fixed in the chain; everything else is arranged around it.',
-    when: 'Tap it on the rehearsal tab to change the sound.',
+    when: 'Tap it on the Amp tab to change the sound.',
   },
   'block.sendReturn': {
     short: 'The effects loop for external devices.',
@@ -979,7 +979,7 @@ const MORE = {
     when: 'Normally last, so the whole sound sits in the room.',
   },
 
-  // ---- Control tab ----
+  // ---- Setup tab ----
   'assign.knobs.target': {
     short: 'What the effect knob on the amp controls for this type.',
     what: 'Turning the knob for this effect on the amp changes the chosen parameter.',

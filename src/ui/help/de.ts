@@ -832,7 +832,7 @@ export const HELP_DE: Readonly<Record<HelpKey, HelpText>> = {
   'pedalFx.type': {
     short: 'Welchen Pedaleffekt das Expression-Pedal spielt.',
     what: 'Pedal Wah, Pedal Bend (Tonhöhe) oder das klassische Wah 95E; das Pedal bewegt ihn.',
-    when: 'Braucht ein Expression-Pedal mit der Funktion Pedal FX (Tab Steuerung).',
+    when: 'Braucht ein Expression-Pedal mit der Funktion Pedal FX (Tab Setup).',
   },
   'pedalFx.position': {
     short: 'Wo der Pedaleffekt sitzt: vor dem Amp oder danach.',
@@ -865,7 +865,7 @@ export const HELP_DE: Readonly<Record<HelpKey, HelpText>> = {
   'solo.on': {
     short: 'Schaltet die Solo-Einstellungen ein.',
     what: 'Solo legt eigene Lautstärke und eigenen EQ über den Patch, für Leadlinien.',
-    when: 'Auf einen Fußschalter legen (Tab Steuerung) und fürs Solo treten.',
+    when: 'Auf einen Fußschalter legen (Tab Setup) und fürs Solo treten.',
   },
   'solo.level': {
     short: 'Wie viel lauter es mit Solo wird.',
@@ -945,7 +945,7 @@ export const HELP_DE: Readonly<Record<HelpKey, HelpText>> = {
   'block.amp': {
     short: 'Der Amp selbst: Vorstufe, Klangregelung, Endstufe.',
     what: 'Fest in der Kette; alles andere wird um ihn herum angeordnet.',
-    when: 'Den Klang änderst du im Tab Probe.',
+    when: 'Den Klang änderst du im Tab Amp.',
   },
   'block.sendReturn': {
     short: 'Der Effektweg für externe Geräte.',
@@ -963,7 +963,7 @@ export const HELP_DE: Readonly<Record<HelpKey, HelpText>> = {
     when: 'Normalerweise zuletzt, damit der ganze Klang im Raum steht.',
   },
 
-  // ---- Tab Steuerung ----
+  // ---- Tab Setup ----
   'assign.knobs.target': {
     short: 'Was der Effekt-Regler am Amp bei diesem Typ steuert.',
     what: 'Drehst du am Amp den Regler dieses Effekts, ändert sich der gewählte Parameter.',
