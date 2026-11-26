@@ -3,6 +3,26 @@
 What changed in each release of Katana Studio. The section of a version becomes the text of its GitHub Release,
 so every version bump adds one here.
 
+## 0.8.0 – 2026-11-26
+
+Polish after a review of the whole app.
+
+### New
+- **More** tab instead of the log: backup with the date of the last one, this patch as a file or as .tsl, load a
+  patch from a file, A1–B4 as .tsl, then language and the log. The window behind "USB" now only shows the
+  connection.
+- The Android back button steps back through explanation, window, effect or Setup page and then to the Amp tab;
+  from there the app goes to the background instead of closing.
+- The screen stays on while the amp is connected.
+
+### Changed
+- Tabs renamed: Rehearsal → Amp, Control → Setup, Log → More (German: Probe → Amp, Steuerung → Setup, Mehr).
+- One look for tabs (text with a line under the active one) and one for values (the chosen one framed); a full
+  colour fill is left for saving.
+- The undo note no longer covers "Revert all to saved" and "Save".
+- Back buttons in Setup look like those on the effect pages.
+- Subtitle and disclaimer are in German when the app is.
+
 ## 0.7.1 – 2026-11-18
 
 ### Changed
