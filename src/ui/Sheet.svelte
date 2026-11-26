@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Window from below (no scrolling of the page behind it), closed by the cross or a tap on the backdrop.
+  // Window from below (no scrolling of the page behind it), closed by the cross, a tap on the backdrop or the back button.
   import type { Snippet } from 'svelte';
+  import { onBack } from './back';
 
   let {
     title,
@@ -8,6 +9,8 @@
     onClose,
     children,
   }: { title: string; closeLabel: string; onClose: () => void; children: Snippet } = $props();
+  // The back button closes the window while it is open.
+  $effect(() => onBack(() => onClose()));
 </script>
 
 <div class="backdrop" role="presentation" onclick={onClose}></div>

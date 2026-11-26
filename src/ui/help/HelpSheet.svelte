@@ -4,9 +4,11 @@
   // that it never scrolls on a 375×667 screen.
   import { t, type Language } from '../i18n';
   import { helpFor, type HelpTarget } from './help';
+  import { onBack } from '../back';
 
   let { target, lang, onClose }: { target: HelpTarget; lang: Language; onClose: () => void } = $props();
   const text = $derived(helpFor(lang, target.key));
+  $effect(() => onBack(() => onClose()));
 </script>
 
 <div class="backdrop" role="presentation" onclick={onClose}></div>

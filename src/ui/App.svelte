@@ -16,6 +16,7 @@
   import { closeHelp, helpState } from './help/state.svelte';
   import { LANGUAGES, LANGUAGE_NAMES, pickLanguage, t, type Language } from './i18n';
   import { createApp } from './setup';
+  import { installBack } from './back';
   import { exportChannelsTsl, exportFile, exportPatchTsl, fileMeta } from './export';
   import { canEdit, hasPatch, rememberedHere } from './view';
   import { SELECTABLE_CHANNELS, slotName, type SaveResult, type WriteResult } from '../state/connection';
@@ -309,6 +310,12 @@
 
   onMount(() => {
     void connection.start();
+    // Back with nothing open: first to the rehearsal tab, from there the app goes to the background.
+    installBack(() => {
+      if (page === 'probe') return false;
+      page = 'probe';
+      return true;
+    });
   });
 </script>
 
@@ -842,13 +849,11 @@
     padding: 0;
     font-weight: 700;
   }
-  /* Floats above the tabs, over the content, without moving it. */
+  /* Sits above the tabs and takes its height from <main>, so it never covers the buttons at the bottom of a page
+     (it once lay over "Save to A1" for the 6 s of an undo); the pages fit themselves into what is left. */
   .toast {
-    position: absolute;
-    left: 14px;
-    right: 14px;
-    bottom: calc(72px + env(safe-area-inset-bottom));
-    margin: 0;
+    flex: none;
+    margin: 0 14px 8px;
     padding: 6px 6px 6px 14px;
     border-radius: 12px;
     background: var(--panel-2);
